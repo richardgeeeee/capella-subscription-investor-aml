@@ -1,34 +1,38 @@
 import { cookies } from 'next/headers';
-import { getAdminByUsername } from '@/db';
-import bcrypt from 'bcryptjs';
 
 const ADMIN_COOKIE_NAME = 'capella_admin';
 
 export function verifyApiKey(request: Request): boolean {
   const apiKey = request.headers.get('x-api-key');
-  return apiKey === process.env.ADMIN_API_KEY;
+  return !!apiKey && apiKey === process.env.ADMIN_API_KEY;
+}
+
+export async function getAdminSession(): Promise<AdminSession | null> {
+  const cookieStore = await cookies();
+  const cookie = cookieStore.get(ADMIN_COOKIE_NAME);
+  if (!cookie) return null;
+
+  try {
+    const session = JSON.parse(cookie.value) as AdminSession;
+    if (!session.email || !session.name) return null;
+    return session;
+  } catch {
+    return null;
+  }
 }
 
 export async function verifyAdminSession(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(ADMIN_COOKIE_NAME);
-  if (!cookie) return false;
-
-  // Simple: cookie value is "username:hash" where hash matches password_hash
-  const [username] = cookie.value.split(':');
-  if (!username) return false;
-
-  const admin = getAdminByUsername(username);
-  return !!admin;
+  const session = await getAdminSession();
+  return !!session;
 }
 
-export async function setAdminCookie(username: string) {
+export async function setAdminCookie(session: AdminSession) {
   const cookieStore = await cookies();
-  cookieStore.set(ADMIN_COOKIE_NAME, `${username}:${Date.now()}`, {
+  cookieStore.set(ADMIN_COOKIE_NAME, JSON.stringify(session), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60, // 1 day
+    maxAge: 7 * 24 * 60 * 60, // 7 days
     path: '/',
   });
 }
@@ -38,8 +42,8 @@ export async function clearAdminCookie() {
   cookieStore.delete(ADMIN_COOKIE_NAME);
 }
 
-export async function authenticateAdmin(username: string, password: string): Promise<boolean> {
-  const admin = getAdminByUsername(username);
-  if (!admin) return false;
-  return bcrypt.compareSync(password, admin.password_hash);
+export interface AdminSession {
+  email: string;
+  name: string;
+  picture?: string;
 }

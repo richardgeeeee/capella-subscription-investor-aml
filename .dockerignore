@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+data
+uploads
+templates
+*.md
+.env*
+!.env.example

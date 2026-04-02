@@ -16,9 +16,16 @@ interface LinkData {
   latest_sync_status: string | null;
 }
 
+interface AdminUser {
+  email: string;
+  name: string;
+  picture?: string;
+}
+
 export default function AdminDashboard() {
   const [links, setLinks] = useState<LinkData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'individual' | 'corporate'>('individual');
@@ -42,7 +49,12 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  useEffect(() => { fetchLinks(); }, [fetchLinks]);
+  useEffect(() => {
+    fetchLinks();
+    fetch('/api/admin/session').then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.authenticated) setUser(data);
+    });
+  }, [fetchLinks]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +93,15 @@ export default function AdminDashboard() {
       <div className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">Capella KYC Admin</h1>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-4">
+            {user && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                {user.picture && (
+                  <img src={user.picture} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                )}
+                <span>{user.name}</span>
+              </div>
+            )}
             <Link href="/admin/contracts" className="text-sm text-blue-600 hover:text-blue-800">
               Contract Templates
             </Link>
@@ -90,6 +110,19 @@ export default function AdminDashboard() {
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
             >
               + New Link
+            </button>
+            <button
+              onClick={async () => {
+                await fetch('/api/admin/auth', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'logout' }),
+                });
+                window.location.href = '/admin/login';
+              }}
+              className="text-sm text-gray-400 hover:text-gray-600"
+            >
+              Logout
             </button>
           </div>
         </div>
