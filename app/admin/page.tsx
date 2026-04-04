@@ -65,8 +65,10 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ investorName: newName, investorType: newType, expiresInDays: parseInt(newDays) }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const text = await res.text();
+      if (!text) throw new Error('Server returned empty response — check Railway deploy logs');
+      const data = JSON.parse(text);
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
       setCreatedUrl(data.url);
       setNewName('');
       fetchLinks();
