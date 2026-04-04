@@ -182,7 +182,15 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <code className="text-sm bg-white px-2 py-1 rounded border flex-1 break-all text-gray-900">{createdUrl}</code>
                   <button
-                    onClick={() => navigator.clipboard.writeText(createdUrl)}
+                    onClick={() => {
+                      const textarea = document.createElement('textarea');
+                      textarea.value = createdUrl;
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(textarea);
+                      alert('Copied!');
+                    }}
                     className="text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap"
                   >
                     Copy
