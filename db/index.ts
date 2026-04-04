@@ -6,6 +6,91 @@ const DB_PATH = process.env.DATABASE_PATH || './data/kyc.db';
 
 let db: Database.Database | null = null;
 
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS links (
+    id              TEXT PRIMARY KEY,
+    token           TEXT UNIQUE NOT NULL,
+    investor_name   TEXT NOT NULL,
+    investor_type   TEXT NOT NULL CHECK(investor_type IN ('individual', 'corporate')),
+    investor_email  TEXT,
+    expires_at      TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    is_revoked      INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    email           TEXT NOT NULL,
+    session_token   TEXT UNIQUE NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at      TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS verification_codes (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    email           TEXT NOT NULL,
+    code            TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at      TEXT NOT NULL,
+    used            INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS submissions (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    email           TEXT NOT NULL,
+    form_data       TEXT NOT NULL DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'draft'
+                    CHECK(status IN ('draft', 'finalized')),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    finalized_at    TEXT,
+    drive_sync_status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(drive_sync_status IN ('pending', 'syncing', 'synced', 'failed')),
+    drive_sync_error TEXT
+);
+CREATE TABLE IF NOT EXISTS uploaded_files (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    submission_id   TEXT REFERENCES submissions(id),
+    document_type   TEXT NOT NULL,
+    original_name   TEXT NOT NULL,
+    stored_path     TEXT NOT NULL,
+    mime_type       TEXT NOT NULL,
+    file_size       INTEGER NOT NULL,
+    uploaded_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    drive_sync_status TEXT NOT NULL DEFAULT 'pending',
+    drive_file_id   TEXT
+);
+CREATE TABLE IF NOT EXISTS admin_users (
+    id              TEXT PRIMARY KEY,
+    username        TEXT UNIQUE NOT NULL,
+    password_hash   TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS contract_templates (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    investor_type   TEXT NOT NULL CHECK(investor_type IN ('individual', 'corporate')),
+    file_path       TEXT NOT NULL,
+    file_type       TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx')),
+    original_name   TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS template_field_mappings (
+    id              TEXT PRIMARY KEY,
+    template_id     TEXT NOT NULL REFERENCES contract_templates(id) ON DELETE CASCADE,
+    placeholder     TEXT NOT NULL,
+    form_field      TEXT NOT NULL,
+    description     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_links_token ON links(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_submissions_link_id ON submissions(link_id);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_link_id ON uploaded_files(link_id);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_submission_id ON uploaded_files(submission_id);
+`;
+
 export function getDb(): Database.Database {
   if (!db) {
     const dir = path.dirname(DB_PATH);
@@ -16,10 +101,7 @@ export function getDb(): Database.Database {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-
-    // Run schema
-    const schema = fs.readFileSync(path.join(process.cwd(), 'db', 'schema.sql'), 'utf-8');
-    db.exec(schema);
+    db.exec(SCHEMA);
   }
   return db;
 }
