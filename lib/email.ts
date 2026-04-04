@@ -1,32 +1,26 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-let transporter: nodemailer.Transporter | null = null;
+let resend: Resend | null = null;
 
-function getTransporter(): nodemailer.Transporter {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+function getResend(): Resend {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
   }
-  return transporter;
+  return resend;
 }
 
 export async function sendVerificationEmail(to: string, code: string, investorName: string): Promise<void> {
-  // In development, just log the code
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  // In development without API key, just log the code
+  if (!process.env.RESEND_API_KEY) {
     console.log(`[DEV] Verification code for ${to}: ${code}`);
     return;
   }
 
-  const transport = getTransporter();
-  await transport.sendMail({
-    from: process.env.SMTP_FROM || 'noreply@capella-capital.com',
+  const r = getResend();
+  const from = process.env.EMAIL_FROM || 'Capella Alpha Fund <noreply@capella-capital.com>';
+
+  await r.emails.send({
+    from,
     to,
     subject: 'Capella Alpha Fund - Verification Code / 奕卓資本 - 验证码',
     html: `
