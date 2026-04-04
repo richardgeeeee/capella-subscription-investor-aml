@@ -1,4 +1,8 @@
 import nodemailer from 'nodemailer';
+import dns from 'dns';
+
+// Force IPv4 DNS resolution (Railway can't reach Gmail SMTP via IPv6)
+dns.setDefaultResultOrder('ipv4first');
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -8,7 +12,6 @@ function getTransporter(): nodemailer.Transporter {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
       secure: false,
-      family: 4,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
