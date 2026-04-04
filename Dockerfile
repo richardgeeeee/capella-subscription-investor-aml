@@ -30,18 +30,18 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/db ./db
 
-# Create persistent data directories
-RUN mkdir -p /app/data /app/uploads /app/templates && \
-    chown -R nextjs:nodejs /app/data /app/uploads /app/templates
+# Create persistent data directories (all under /app/data for single volume mount)
+RUN mkdir -p /app/data/uploads /app/data/templates && \
+    chown -R nextjs:nodejs /app/data
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# SQLite and uploads use /app/data and /app/uploads (mount Railway volumes here)
+# All persistent data under /app/data (single Railway volume)
 ENV DATABASE_PATH=/app/data/kyc.db
-ENV UPLOAD_DIR=/app/uploads
-ENV TEMPLATE_DIR=/app/templates
+ENV UPLOAD_DIR=/app/data/uploads
+ENV TEMPLATE_DIR=/app/data/templates
 
 CMD ["node", "server.js"]
