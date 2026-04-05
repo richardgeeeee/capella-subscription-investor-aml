@@ -25,6 +25,7 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
         token={token}
         investorName={link.investor_name}
         investorType={link.investor_type}
+        investorEmail={link.investor_email}
       />
     );
   }

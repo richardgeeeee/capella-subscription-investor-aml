@@ -16,6 +16,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Link is ${result.reason}` }, { status: 400 });
   }
 
+  // Enforce pre-set email if configured
+  if (result.link!.investor_email && result.link!.investor_email.toLowerCase() !== email.toLowerCase()) {
+    return NextResponse.json({ error: 'This link is restricted to the pre-set email address. / 此链接仅限预设邮箱使用。' }, { status: 403 });
+  }
+
   const code = createAndStoreVerificationCode(result.link!.id, email);
 
   try {

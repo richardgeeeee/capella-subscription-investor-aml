@@ -7,15 +7,18 @@ interface EmailLoginProps {
   token: string;
   investorName: string;
   investorType: string;
+  investorEmail?: string | null;
 }
 
-export function EmailLogin({ token, investorName }: EmailLoginProps) {
+export function EmailLogin({ token, investorName, investorEmail }: EmailLoginProps) {
   const router = useRouter();
   const [step, setStep] = useState<'email' | 'code'>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(investorEmail || '');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const isEmailLocked = !!investorEmail;
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,16 +81,22 @@ export function EmailLogin({ token, investorName }: EmailLoginProps) {
         {step === 'email' ? (
           <form onSubmit={handleSendCode}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              请输入您的邮箱以继续 / Please enter your email to continue
+              {isEmailLocked
+                ? '请使用以下邮箱获取验证码 / Verify with this email'
+                : '请输入您的邮箱以继续 / Please enter your email to continue'}
             </label>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => !isEmailLocked && setEmail(e.target.value)}
+              readOnly={isEmailLocked}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 ${isEmailLocked ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               placeholder="your@email.com"
             />
+            {isEmailLocked && (
+              <p className="mt-1 text-xs text-gray-400">此邮箱由管理员预设 / Email pre-set by administrator</p>
+            )}
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <button
               type="submit"

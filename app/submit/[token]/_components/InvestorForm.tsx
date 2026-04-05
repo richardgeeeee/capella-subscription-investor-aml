@@ -240,9 +240,29 @@ export function InvestorForm({
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">
-              {saving ? (t('save_draft', lang)) : lastSaved ? `${t('saved', lang)} ${lastSaved.toLocaleTimeString()}` : ''}
-            </span>
+            <div className="flex items-center gap-2">
+              {saving ? (
+                <span className="text-xs text-blue-500 flex items-center gap-1">
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  {t('save_draft', lang)}...
+                </span>
+              ) : lastSaved ? (
+                <span className="text-xs text-green-600 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  {t('saved', lang)} {lastSaved.toLocaleTimeString()}
+                </span>
+              ) : null}
+              <button
+                onClick={() => {
+                  if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                  autoSave(formData);
+                }}
+                disabled={saving}
+                className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {t('save_draft', lang)}
+              </button>
+            </div>
             <LanguageToggle lang={lang} onToggle={setLang} />
           </div>
         </div>
@@ -321,12 +341,17 @@ export function InvestorForm({
             {submitError}
           </div>
         )}
+        <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
+          您的表单会自动保存。请在确认所有信息无误后点击下方按钮最终提交。
+          <br />
+          Your form is auto-saved. Click below only when you are ready to finalize.
+        </div>
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="w-full bg-blue-600 text-white py-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
+          className="w-full bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 disabled:opacity-50 font-semibold text-lg"
         >
-          {submitting ? '提交中... / Submitting...' : `${t('submit', lang)} / Submit`}
+          {submitting ? '提交中... / Submitting...' : '最终提交 / Submit Final'}
         </button>
 
         <p className="mt-4 text-center text-sm text-gray-400">

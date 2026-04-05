@@ -43,3 +43,36 @@ export async function sendVerificationEmail(to: string, code: string, investorNa
     throw new Error(`Resend error: ${error.message}`);
   }
 }
+
+export async function sendInvitationEmail(
+  to: string,
+  investorName: string,
+  link: string,
+  expiresAt: string,
+  template: { subject: string; body_html: string }
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[DEV] Invitation email for ${to}: ${link}`);
+    return;
+  }
+
+  const r = getResend();
+  const from = process.env.EMAIL_FROM || 'Capella Alpha Fund <onboarding@resend.dev>';
+  const formattedExpiry = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const subject = template.subject
+    .replace(/\{\{investorName\}\}/g, investorName)
+    .replace(/\{\{link\}\}/g, link)
+    .replace(/\{\{expiresAt\}\}/g, formattedExpiry);
+
+  const html = template.body_html
+    .replace(/\{\{investorName\}\}/g, investorName)
+    .replace(/\{\{link\}\}/g, link)
+    .replace(/\{\{expiresAt\}\}/g, formattedExpiry);
+
+  const { error } = await r.emails.send({ from, to, subject, html });
+
+  if (error) {
+    throw new Error(`Resend error: ${error.message}`);
+  }
+}

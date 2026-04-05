@@ -89,6 +89,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(session_token);
 CREATE INDEX IF NOT EXISTS idx_submissions_link_id ON submissions(link_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_link_id ON uploaded_files(link_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_submission_id ON uploaded_files(submission_id);
+CREATE TABLE IF NOT EXISTS email_templates (
+    id              TEXT PRIMARY KEY,
+    name            TEXT UNIQUE NOT NULL,
+    subject         TEXT NOT NULL,
+    body_html       TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_links_investor_email ON links(investor_email);
 `;
 
 export function getDb(): Database.Database {
@@ -102,8 +111,36 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.exec(SCHEMA);
+    seedDefaultEmailTemplates(db);
   }
   return db;
+}
+
+function seedDefaultEmailTemplates(db: Database.Database) {
+  const existing = db.prepare('SELECT id FROM email_templates WHERE name = ?').get('investor_invitation');
+  if (!existing) {
+    db.prepare(`
+      INSERT INTO email_templates (id, name, subject, body_html)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      crypto.randomUUID(),
+      'investor_invitation',
+      'Capella Alpha Fund - Investor Information Collection / 奕卓資本 - 投资者信息收集',
+      `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2>Capella Alpha Fund / 奕卓資本</h2>
+  <p>Dear {{investorName}},</p>
+  <p>We kindly invite you to complete your investor information form. Please click the link below to access your personalized submission page:</p>
+  <p>我们诚邀您填写投资者信息表。请点击以下链接访问您的专属页面：</p>
+  <div style="margin: 20px 0; text-align: center;">
+    <a href="{{link}}" style="background: #2563eb; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Access Form / 访问表单</a>
+  </div>
+  <p style="word-break: break-all; font-size: 12px; color: #666;">{{link}}</p>
+  <p>This link will expire on {{expiresAt}}. / 此链接将于 {{expiresAt}} 过期。</p>
+  <hr style="margin: 20px 0;" />
+  <p style="color: #888; font-size: 12px;">Capella Capital Limited / 奕卓資本有限公司</p>
+</div>`
+    );
+  }
 }
 
 // ---- Link helpers ----
@@ -120,7 +157,7 @@ export function createLink(params: {
   return db.prepare(`
     INSERT INTO links (id, token, investor_name, investor_type, investor_email, expires_at)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(params.id, params.token, params.investorName, params.investorType, params.investorEmail || null, params.expiresAt);
+  `).run(params.id, params.token, params.investorName, params.investorType, params.investorEmail?.toLowerCase() || null, params.expiresAt);
 }
 
 export function getLinkByToken(token: string) {
@@ -359,6 +396,36 @@ export function deleteFieldMappingsByTemplateId(templateId: string) {
   return db.prepare('DELETE FROM template_field_mappings WHERE template_id = ?').run(templateId);
 }
 
+// ---- Email template helpers ----
+
+export function getEmailTemplate(name: string) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM email_templates WHERE name = ?').get(name) as EmailTemplateRow | undefined;
+}
+
+export function upsertEmailTemplate(params: { name: string; subject: string; bodyHtml: string }) {
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM email_templates WHERE name = ?').get(params.name) as { id: string } | undefined;
+  if (existing) {
+    db.prepare(`UPDATE email_templates SET subject = ?, body_html = ?, updated_at = datetime('now') WHERE name = ?`)
+      .run(params.subject, params.bodyHtml, params.name);
+  } else {
+    db.prepare(`INSERT INTO email_templates (id, name, subject, body_html) VALUES (?, ?, ?, ?)`)
+      .run(crypto.randomUUID(), params.name, params.subject, params.bodyHtml);
+  }
+}
+
+// ---- Link-by-email helpers ----
+
+export function getLinksByEmail(email: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM links
+    WHERE investor_email = ? AND is_revoked = 0 AND expires_at > datetime('now')
+    ORDER BY created_at DESC
+  `).all(email.toLowerCase()) as LinkRow[];
+}
+
 // ---- Row types ----
 
 export interface LinkRow {
@@ -442,4 +509,13 @@ export interface FieldMappingRow {
   placeholder: string;
   form_field: string;
   description: string | null;
+}
+
+export interface EmailTemplateRow {
+  id: string;
+  name: string;
+  subject: string;
+  body_html: string;
+  created_at: string;
+  updated_at: string;
 }

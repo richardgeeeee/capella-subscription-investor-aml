@@ -8,6 +8,7 @@ interface LinkData {
   token: string;
   investor_name: string;
   investor_type: string;
+  investor_email: string | null;
   expires_at: string;
   created_at: string;
   is_revoked: number;
@@ -28,10 +29,16 @@ export default function AdminDashboard() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newType, setNewType] = useState<'individual' | 'corporate'>('individual');
   const [newDays, setNewDays] = useState('30');
   const [creating, setCreating] = useState(false);
   const [createdUrl, setCreatedUrl] = useState('');
+  const [createdLinkId, setCreatedLinkId] = useState('');
+  const [createdEmail, setCreatedEmail] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const fetchLinks = useCallback(async () => {
     try {
@@ -56,26 +63,67 @@ export default function AdminDashboard() {
     });
   }, [fetchLinks]);
 
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url).catch(() => {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCopied(false);
+    setEmailSent(false);
     try {
       const res = await fetch('/api/admin/generate-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ investorName: newName, investorType: newType, expiresInDays: parseInt(newDays) }),
+        body: JSON.stringify({
+          investorName: newName,
+          investorType: newType,
+          investorEmail: newEmail || undefined,
+          expiresInDays: parseInt(newDays),
+        }),
       });
       const text = await res.text();
-      if (!text) throw new Error('Server returned empty response — check Railway deploy logs');
+      if (!text) throw new Error('Server returned empty response — check deploy logs');
       const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error || 'Unknown error');
       setCreatedUrl(data.url);
+      setCreatedLinkId(data.id);
+      setCreatedEmail(newEmail);
       setNewName('');
+      setNewEmail('');
       fetchLinks();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create link');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const res = await fetch('/api/admin/send-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId: createdLinkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      setEmailSent(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -104,11 +152,14 @@ export default function AdminDashboard() {
                 <span>{user.name}</span>
               </div>
             )}
+            <Link href="/admin/email-templates" className="text-sm text-blue-600 hover:text-blue-800">
+              Email Template
+            </Link>
             <Link href="/admin/contracts" className="text-sm text-blue-600 hover:text-blue-800">
               Contract Templates
             </Link>
             <button
-              onClick={() => { setShowForm(!showForm); setCreatedUrl(''); }}
+              onClick={() => { setShowForm(!showForm); setCreatedUrl(''); setCopied(false); setEmailSent(false); }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
             >
               + New Link
@@ -148,6 +199,16 @@ export default function AdminDashboard() {
                 />
               </div>
               <div>
+                <label className="block text-sm text-gray-600 mb-1">Email (optional)</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                  placeholder="investor@email.com"
+                />
+              </div>
+              <div>
                 <label className="block text-sm text-gray-600 mb-1">Type</label>
                 <select
                   value={newType}
@@ -182,20 +243,50 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <code className="text-sm bg-white px-2 py-1 rounded border flex-1 break-all text-gray-900">{createdUrl}</code>
                   <button
-                    onClick={() => {
-                      const textarea = document.createElement('textarea');
-                      textarea.value = createdUrl;
-                      document.body.appendChild(textarea);
-                      textarea.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(textarea);
-                      alert('Copied!');
-                    }}
-                    className="text-sm text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                    onClick={() => handleCopy(createdUrl)}
+                    className={`p-2 rounded-lg border transition-colors ${copied ? 'bg-green-100 border-green-300 text-green-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+                    title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >
-                    Copy
+                    {copied ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
                   </button>
                 </div>
+                {/* Send email section */}
+                {createdEmail && (
+                  <div className="mt-3 pt-3 border-t border-green-200 flex items-center gap-3">
+                    <button
+                      onClick={handleSendEmail}
+                      disabled={sendingEmail || emailSent}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        emailSent
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                      }`}
+                    >
+                      {emailSent ? (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Email Sent
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                          {sendingEmail ? 'Sending...' : `Send to ${createdEmail}`}
+                        </>
+                      )}
+                    </button>
+                    <Link href="/admin/email-templates" className="text-sm text-gray-500 hover:text-blue-600">
+                      Edit template
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -221,7 +312,10 @@ export default function AdminDashboard() {
               <tbody className="divide-y">
                 {links.map((link) => (
                   <tr key={link.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{link.investor_name}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">{link.investor_name}</div>
+                      {link.investor_email && <div className="text-xs text-gray-400">{link.investor_email}</div>}
+                    </td>
                     <td className="px-4 py-3 text-gray-600 capitalize">{link.investor_type}</td>
                     <td className="px-4 py-3">{getStatusBadge(link)}</td>
                     <td className="px-4 py-3 text-gray-600">{link.latest_sync_status || '-'}</td>
