@@ -6,6 +6,7 @@ import { type InvestorType, type UploadedFileInfo } from '@/lib/types';
 import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES } from '@/lib/constants';
 import { LanguageToggle } from './LanguageToggle';
 import { FormField } from './FormField';
+import { MonthEndDateField } from './MonthEndDateField';
 import { FileDropzone } from './FileDropzone';
 
 interface InvestorFormProps {
@@ -15,12 +16,13 @@ interface InvestorFormProps {
   expiresAt: string;
   savedFormData: Record<string, string>;
   uploadedFiles: UploadedFileInfo[];
-  isFinalized: boolean;
+  submittedVersionCount: number;
+  lastSubmittedAt: string | null;
 }
 
 interface FieldDef {
   key: string;
-  type?: 'text' | 'date' | 'email' | 'number' | 'textarea';
+  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end';
   readOnly?: boolean;
   required?: boolean;
   footnoteKey?: string;
@@ -34,7 +36,7 @@ interface SectionDef {
 const INDIVIDUAL_FIELDS: SectionDef[] = [
   { section: 'section_subscription', fields: [
     { key: 'investorName', readOnly: true, required: true },
-    { key: 'subscriptionDate', type: 'date', required: true },
+    { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
     { key: 'subscriptionAmount', required: true },
   ]},
   { section: 'section_investor', fields: [
@@ -48,11 +50,11 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'phoneNumber', required: true },
     { key: 'emailAddress', type: 'email', required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
-    { key: 'sourceOfFunds', type: 'textarea', required: true },
+    { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds' },
     { key: 'employerName' },
     { key: 'title' },
     { key: 'employmentPeriod' },
-    { key: 'purposeOfInvestment', required: true },
+    { key: 'purposeOfInvestment', required: true, footnoteKey: 'footnote_purpose_of_investment' },
   ]},
   { section: 'section_payment', fields: [
     { key: 'bankName', required: true },
@@ -66,7 +68,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
 const CORPORATE_FIELDS: SectionDef[] = [
   { section: 'section_subscription', fields: [
     { key: 'investorName', readOnly: true, required: true },
-    { key: 'subscriptionDate', type: 'date', required: true },
+    { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
     { key: 'subscriptionAmount', required: true },
   ]},
   { section: 'section_investor', fields: [
@@ -80,7 +82,7 @@ const CORPORATE_FIELDS: SectionDef[] = [
     { key: 'emailAddress', type: 'email', required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds_corporate' },
-    { key: 'purposeOfInvestment', required: true },
+    { key: 'purposeOfInvestment', required: true, footnoteKey: 'footnote_purpose_of_investment' },
   ]},
   { section: 'section_payment', fields: [
     { key: 'bankName', required: true },
@@ -98,7 +100,8 @@ export function InvestorForm({
   expiresAt,
   savedFormData,
   uploadedFiles: initialUploadedFiles,
-  isFinalized: initialIsFinalized,
+  submittedVersionCount: initialVersionCount,
+  lastSubmittedAt: initialLastSubmittedAt,
 }: InvestorFormProps) {
   const [lang, setLang] = useState<Language>('zh');
   const [formData, setFormData] = useState<Record<string, string>>({
@@ -109,7 +112,9 @@ export function InvestorForm({
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [isFinalized, setIsFinalized] = useState(initialIsFinalized);
+  const [versionCount, setVersionCount] = useState(initialVersionCount);
+  const [lastSubmittedAt, setLastSubmittedAt] = useState<string | null>(initialLastSubmittedAt);
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -197,7 +202,11 @@ export function InvestorForm({
         }
         return;
       }
-      setIsFinalized(true);
+      setVersionCount(data.versionNumber);
+      setLastSubmittedAt(new Date().toISOString());
+      setJustSubmitted(true);
+      setTimeout(() => setJustSubmitted(false), 5000);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Submission failed');
     } finally {
@@ -211,22 +220,6 @@ export function InvestorForm({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
-
-  if (isFinalized) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-8 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
-            <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('success_title', lang)}</h1>
-          <p className="text-gray-600">{t('success_message', lang)}</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -269,6 +262,32 @@ export function InvestorForm({
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6">
+        {/* Submission status banner */}
+        {justSubmitted && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+            <svg className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            <div>
+              <p className="text-sm font-medium text-green-800">提交成功！Submission successful!</p>
+              <p className="text-xs text-green-700 mt-1">您已提交版本 {versionCount}。您仍可继续修改并再次提交。 / You have submitted version {versionCount}. You can still edit and submit again.</p>
+            </div>
+          </div>
+        )}
+        {!justSubmitted && versionCount > 0 && lastSubmittedAt && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div>
+              <p className="text-sm font-medium text-blue-800">
+                已提交 {versionCount} 次 / Submitted {versionCount} time{versionCount > 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-blue-700 mt-1">
+                上次提交 / Last submitted: {new Date(lastSubmittedAt).toLocaleString()}
+                <br />
+                您可以继续编辑并再次提交更新版本。 / You can continue editing and submit an updated version.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Expiry notice */}
         <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
           有效期至 / Valid until: {new Date(expiresAt).toLocaleDateString()} {new Date(expiresAt).toLocaleTimeString()}
@@ -280,19 +299,34 @@ export function InvestorForm({
             <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
               {t(section.section, lang)}
             </h2>
-            {section.fields.map((field) => (
-              <FormField
-                key={field.key}
-                fieldKey={field.key}
-                lang={lang}
-                value={formData[field.key] || ''}
-                onChange={(value) => handleFieldChange(field.key, value)}
-                type={field.type}
-                readOnly={field.readOnly}
-                required={field.required}
-                footnote={field.footnoteKey ? t(field.footnoteKey, lang) : undefined}
-              />
-            ))}
+            {section.fields.map((field) => {
+              if (field.type === 'month_end') {
+                return (
+                  <MonthEndDateField
+                    key={field.key}
+                    fieldKey={field.key}
+                    lang={lang}
+                    value={formData[field.key] || ''}
+                    onChange={(value) => handleFieldChange(field.key, value)}
+                    required={field.required}
+                    footnoteKey={field.footnoteKey}
+                  />
+                );
+              }
+              return (
+                <FormField
+                  key={field.key}
+                  fieldKey={field.key}
+                  lang={lang}
+                  value={formData[field.key] || ''}
+                  onChange={(value) => handleFieldChange(field.key, value)}
+                  type={field.type}
+                  readOnly={field.readOnly}
+                  required={field.required}
+                  footnoteKey={field.footnoteKey}
+                />
+              );
+            })}
           </div>
         ))}
 
@@ -342,16 +376,30 @@ export function InvestorForm({
           </div>
         )}
         <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
-          您的表单会自动保存。请在确认所有信息无误后点击下方按钮最终提交。
-          <br />
-          Your form is auto-saved. Click below only when you are ready to finalize.
+          {versionCount > 0 ? (
+            <>
+              您的修改会自动保存。点击下方按钮提交更新版本。您可以多次提交。
+              <br />
+              Your changes are auto-saved. Click below to submit an updated version. Multiple submissions are allowed.
+            </>
+          ) : (
+            <>
+              您的表单会自动保存。请在确认所有信息无误后点击下方按钮提交。提交后仍可继续修改。
+              <br />
+              Your form is auto-saved. Click below when ready to submit. You can still edit and resubmit afterward.
+            </>
+          )}
         </div>
         <button
           onClick={handleSubmit}
           disabled={submitting}
           className="w-full bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 disabled:opacity-50 font-semibold text-lg"
         >
-          {submitting ? '提交中... / Submitting...' : '最终提交 / Submit Final'}
+          {submitting
+            ? '提交中... / Submitting...'
+            : versionCount > 0
+              ? `提交新版本 / Submit New Version (v${versionCount + 1})`
+              : '提交 / Submit'}
         </button>
 
         <p className="mt-4 text-center text-sm text-gray-400">

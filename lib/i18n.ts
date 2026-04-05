@@ -94,9 +94,21 @@ export const labels: Record<string, { en: string; zh: string }> = {
     en: 'Please summarize the sources of wealth (i.e. the economic activity which generated your total net worth), for example: Employment (job title, employer name in English and Chinese, nature of business, employment period); Self-employed/Business Owner (details of the nature of the business, employer name in English and Chinese)',
     zh: '请总结财富来源（即产生你全部净资产的经济活动），例如：受雇工作（如果是这种情况，请提供详细的职位名称/职能、雇主的英文名称（如有中文名称也请提供）、业务性质、受雇时间段）；个体经营者/企业主：业务性质的详细信息、雇主的英文名称（如有中文名称也请提供）',
   },
+  footnote_source_of_funds: {
+    en: 'Please summarize the sources of funds used to make this investment (e.g., salary income, investment income, savings, inheritance, gift, etc.)',
+    zh: '请概述用于本次投资的资金来源（例如：工资收入、投资收益、储蓄、继承、赠与等）',
+  },
   footnote_source_of_funds_corporate: {
     en: 'Please summarize the sources of funds used to make this investment (e.g., business profits, investment income, savings, etc.)',
     zh: '请概述用于本次投资的资金来源（例如：认购资金来自企业利润（如属此类，请说明企业类型）、投资收益、储蓄等）',
+  },
+  footnote_purpose_of_investment: {
+    en: 'Please describe the purpose of this investment (e.g., capital appreciation, capital preservation, portfolio diversification, retirement planning, etc.)',
+    zh: '请说明本次投资的目的（例如：资本增值、资本保值、投资组合多元化、退休规划等）',
+  },
+  footnote_subscription_date: {
+    en: 'Subscription date must be the last day of a month.',
+    zh: '申购日期必须为每月的最后一天。',
   },
   footnote_asset_proof: {
     en: 'Required for SFC professional investor qualification. Proof of liquid assets (cash, stocks, bonds, etc.) exceeding HKD 8 million within the last 3 months. Not required if investing HKD 8 million or more.',

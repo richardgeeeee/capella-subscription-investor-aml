@@ -89,6 +89,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(session_token);
 CREATE INDEX IF NOT EXISTS idx_submissions_link_id ON submissions(link_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_link_id ON uploaded_files(link_id);
 CREATE INDEX IF NOT EXISTS idx_uploaded_files_submission_id ON uploaded_files(submission_id);
+CREATE TABLE IF NOT EXISTS submission_versions (
+    id              TEXT PRIMARY KEY,
+    submission_id   TEXT NOT NULL REFERENCES submissions(id),
+    version_number  INTEGER NOT NULL,
+    form_data       TEXT NOT NULL,
+    file_ids        TEXT NOT NULL DEFAULT '[]',
+    submitted_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_submission_versions_submission_id ON submission_versions(submission_id);
 CREATE TABLE IF NOT EXISTS email_templates (
     id              TEXT PRIMARY KEY,
     name            TEXT UNIQUE NOT NULL,
@@ -241,8 +250,9 @@ export function markCodeUsed(id: string) {
 
 export function getOrCreateSubmission(linkId: string, email: string): SubmissionRow {
   const db = getDb();
+  // Find any existing submission for this link+email (draft or finalized — allow re-editing)
   const existing = db.prepare(`
-    SELECT * FROM submissions WHERE link_id = ? AND email = ? AND status = 'draft'
+    SELECT * FROM submissions WHERE link_id = ? AND email = ?
     ORDER BY updated_at DESC LIMIT 1
   `).get(linkId, email) as SubmissionRow | undefined;
 
@@ -285,6 +295,42 @@ export function updateSubmissionSyncStatus(id: string, status: string, error?: s
   return db.prepare(`
     UPDATE submissions SET drive_sync_status = ?, drive_sync_error = ?, updated_at = datetime('now') WHERE id = ?
   `).run(status, error || null, id);
+}
+
+// ---- Submission version helpers ----
+
+export function createSubmissionVersion(params: {
+  submissionId: string;
+  formData: string;
+  fileIds: string[];
+}) {
+  const db = getDb();
+  const latest = db.prepare(`
+    SELECT MAX(version_number) as max_version FROM submission_versions WHERE submission_id = ?
+  `).get(params.submissionId) as { max_version: number | null };
+
+  const versionNumber = (latest?.max_version || 0) + 1;
+  const id = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO submission_versions (id, submission_id, version_number, form_data, file_ids)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, params.submissionId, versionNumber, params.formData, JSON.stringify(params.fileIds));
+
+  return { id, versionNumber };
+}
+
+export function getSubmissionVersions(submissionId: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM submission_versions WHERE submission_id = ? ORDER BY version_number DESC
+  `).all(submissionId) as SubmissionVersionRow[];
+}
+
+export function getLatestSubmissionVersion(submissionId: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM submission_versions WHERE submission_id = ? ORDER BY version_number DESC LIMIT 1
+  `).get(submissionId) as SubmissionVersionRow | undefined;
 }
 
 // ---- File helpers ----
@@ -518,4 +564,13 @@ export interface EmailTemplateRow {
   body_html: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface SubmissionVersionRow {
+  id: string;
+  submission_id: string;
+  version_number: number;
+  form_data: string;
+  file_ids: string;
+  submitted_at: string;
 }

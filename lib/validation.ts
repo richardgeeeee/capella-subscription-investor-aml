@@ -8,9 +8,17 @@ const paymentSchema = z.object({
   accountNumber: z.string().min(1, 'Required'),
 });
 
+const monthEndDate = z.string().min(1, 'Required').refine((value) => {
+  // YYYY-MM-DD format, and must be the last day of that month
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return d === lastDay;
+}, 'Subscription date must be the last day of a month');
+
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),
-  subscriptionDate: z.string().min(1, 'Required'),
+  subscriptionDate: monthEndDate,
   subscriptionAmount: z.string().min(1, 'Required'),
 });
 

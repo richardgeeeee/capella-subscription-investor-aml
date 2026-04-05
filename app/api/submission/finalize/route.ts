@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
-import { getOrCreateSubmission, finalizeSubmission, getFilesByLinkId } from '@/db';
+import {
+  getOrCreateSubmission,
+  finalizeSubmission,
+  getFilesByLinkId,
+  createSubmissionVersion,
+} from '@/db';
 import { individualFormSchema, corporateFormSchema } from '@/lib/validation';
 import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES } from '@/lib/constants';
 import { syncSubmissionToGoogleDrive } from '@/lib/google-drive-sync';
@@ -52,7 +57,6 @@ export async function POST(request: Request) {
   const missingDocs: string[] = [];
   for (const doc of requiredDocs) {
     if (!doc.required) continue;
-    // For personnel docs, check any file starting with the key
     if ('multiple' in doc && doc.multiple) {
       if (!files.some(f => f.document_type.startsWith(doc.key))) {
         missingDocs.push(doc.key);
@@ -71,7 +75,14 @@ export async function POST(request: Request) {
     }, { status: 400 });
   }
 
-  // Finalize
+  // Create a version snapshot
+  const { versionNumber } = createSubmissionVersion({
+    submissionId: submission.id,
+    formData: submission.form_data,
+    fileIds: files.map(f => f.id),
+  });
+
+  // Mark as finalized (but still editable — investors can submit additional versions)
   finalizeSubmission(submission.id);
 
   // Trigger async Google Drive sync
@@ -79,5 +90,5 @@ export async function POST(request: Request) {
     console.error('Google Drive sync failed:', err);
   });
 
-  return NextResponse.json({ success: true, submissionId: submission.id });
+  return NextResponse.json({ success: true, submissionId: submission.id, versionNumber });
 }

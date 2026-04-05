@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
-import { getOrCreateSubmission, getFilesByLinkId } from '@/db';
+import { getOrCreateSubmission, getFilesByLinkId, getSubmissionVersions } from '@/db';
 import { InvestorForm } from './_components/InvestorForm';
 import { EmailLogin } from './_components/EmailLogin';
 
@@ -42,6 +42,8 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
     fileSize: f.file_size,
     uploadedAt: f.uploaded_at,
   }));
+  const versions = getSubmissionVersions(submission.id);
+  const latestVersion = versions[0];
 
   return (
     <InvestorForm
@@ -51,7 +53,8 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
       expiresAt={link.expires_at}
       savedFormData={savedFormData}
       uploadedFiles={uploadedFiles}
-      isFinalized={submission.status === 'finalized'}
+      submittedVersionCount={versions.length}
+      lastSubmittedAt={latestVersion?.submitted_at || null}
     />
   );
 }

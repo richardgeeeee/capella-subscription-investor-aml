@@ -11,7 +11,7 @@ interface FormFieldProps {
   readOnly?: boolean;
   required?: boolean;
   placeholder?: string;
-  footnote?: string;
+  footnoteKey?: string;
   error?: string;
 }
 
@@ -24,7 +24,7 @@ export function FormField({
   readOnly = false,
   required = false,
   placeholder,
-  footnote,
+  footnoteKey,
   error,
 }: FormFieldProps) {
   const label = t(fieldKey, lang);
@@ -62,8 +62,11 @@ export function FormField({
           placeholder={placeholder}
         />
       )}
-      {footnote && (
-        <p className="mt-1 text-xs text-gray-500">{footnote}</p>
+      {footnoteKey && (
+        <div className="mt-1 space-y-0.5">
+          <p className="text-xs text-gray-500">{t(footnoteKey, 'zh')}</p>
+          <p className="text-xs text-gray-400">{t(footnoteKey, 'en')}</p>
+        </div>
       )}
       {error && (
         <p className="mt-1 text-xs text-red-600">{error}</p>

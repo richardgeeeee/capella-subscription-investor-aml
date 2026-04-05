@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
-import { createUploadedFile, getOrCreateSubmission, getFilesByLinkId, deleteFileById } from '@/db';
+import { createUploadedFile, getOrCreateSubmission, getFilesByLinkId, deleteFileById, getSubmissionVersions } from '@/db';
 import { MAX_FILE_SIZE, ACCEPTED_MIME_TYPES } from '@/lib/constants';
 
 export async function POST(request: Request) {
@@ -48,13 +48,27 @@ export async function POST(request: Request) {
     fs.mkdirSync(linkDir, { recursive: true });
   }
 
-  // Delete previous file of same document type (for non-multiple types)
+  // Get or create submission first (needed to check version references)
+  const submission = getOrCreateSubmission(result.link!.id, session.email);
+
+  // For non-multiple document types, remove the previous file of same type
+  // BUT keep files that are referenced by any submission version (preserve history)
   const isMultiple = documentType.startsWith('personnel_');
   if (!isMultiple) {
     const existingFiles = getFilesByLinkId(result.link!.id);
+    const versions = getSubmissionVersions(submission.id);
+    const referencedFileIds = new Set<string>();
+    for (const v of versions) {
+      for (const fid of JSON.parse(v.file_ids || '[]') as string[]) {
+        referencedFileIds.add(fid);
+      }
+    }
     for (const existing of existingFiles) {
       if (existing.document_type === documentType) {
-        // Delete old file from disk
+        if (referencedFileIds.has(existing.id)) {
+          // Keep as historical record — do not delete from DB or disk
+          continue;
+        }
         if (fs.existsSync(existing.stored_path)) {
           fs.unlinkSync(existing.stored_path);
         }
@@ -69,9 +83,6 @@ export async function POST(request: Request) {
   const storedPath = path.join(linkDir, `${fileId}${ext}`);
   const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(storedPath, buffer);
-
-  // Get or create submission
-  const submission = getOrCreateSubmission(result.link!.id, session.email);
 
   // Create DB record
   createUploadedFile({

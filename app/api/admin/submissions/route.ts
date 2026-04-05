@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById } from '@/db';
+import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions } from '@/db';
 import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
@@ -21,13 +21,34 @@ export async function GET(request: NextRequest) {
 
   const submissions = getSubmissionsByLinkId(linkId);
   const files = getFilesByLinkId(linkId);
+  const fileMap = new Map(files.map(f => [f.id, f]));
+
+  const submissionsWithVersions = submissions.map(s => {
+    const versions = getSubmissionVersions(s.id);
+    return {
+      ...s,
+      form_data: JSON.parse(s.form_data || '{}'),
+      versions: versions.map(v => ({
+        id: v.id,
+        version_number: v.version_number,
+        submitted_at: v.submitted_at,
+        form_data: JSON.parse(v.form_data || '{}'),
+        files: (JSON.parse(v.file_ids || '[]') as string[])
+          .map(fid => fileMap.get(fid))
+          .filter((f): f is NonNullable<typeof f> => !!f)
+          .map(f => ({
+            id: f.id,
+            document_type: f.document_type,
+            original_name: f.original_name,
+            file_size: f.file_size,
+          })),
+      })),
+    };
+  });
 
   return NextResponse.json({
     link,
-    submissions: submissions.map(s => ({
-      ...s,
-      form_data: JSON.parse(s.form_data || '{}'),
-    })),
+    submissions: submissionsWithVersions,
     files,
   });
 }
