@@ -1,24 +1,26 @@
-import { Resend } from 'resend';
+import sgMail from '@sendgrid/mail';
 
-let resend: Resend | null = null;
+let initialized = false;
 
-function getResend(): Resend {
-  if (!resend) {
-    resend = new Resend(process.env.RESEND_API_KEY);
+function init() {
+  if (!initialized && process.env.SENDGRID_API_KEY) {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    initialized = true;
   }
-  return resend;
 }
 
+const DEFAULT_FROM = 'Capella Capital <richard.ge@capella-capital.com>';
+
 export async function sendVerificationEmail(to: string, code: string, investorName: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.SENDGRID_API_KEY) {
     console.log(`[DEV] Verification code for ${to}: ${code}`);
     return;
   }
 
-  const r = getResend();
-  const from = process.env.EMAIL_FROM || 'Capella Alpha Fund <onboarding@resend.dev>';
+  init();
+  const from = process.env.EMAIL_FROM || DEFAULT_FROM;
 
-  const { error } = await r.emails.send({
+  await sgMail.send({
     from,
     to,
     subject: 'Capella Alpha Fund - Verification Code / 奕卓資本 - 验证码',
@@ -38,10 +40,6 @@ export async function sendVerificationEmail(to: string, code: string, investorNa
       </div>
     `,
   });
-
-  if (error) {
-    throw new Error(`Resend error: ${error.message}`);
-  }
 }
 
 export async function sendInvitationEmail(
@@ -51,13 +49,13 @@ export async function sendInvitationEmail(
   expiresAt: string,
   template: { subject: string; body_html: string }
 ): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.SENDGRID_API_KEY) {
     console.log(`[DEV] Invitation email for ${to}: ${link}`);
     return;
   }
 
-  const r = getResend();
-  const from = process.env.EMAIL_FROM || 'Capella Alpha Fund <onboarding@resend.dev>';
+  init();
+  const from = process.env.EMAIL_FROM || DEFAULT_FROM;
   const formattedExpiry = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   const subject = template.subject
@@ -70,9 +68,5 @@ export async function sendInvitationEmail(
     .replace(/\{\{link\}\}/g, link)
     .replace(/\{\{expiresAt\}\}/g, formattedExpiry);
 
-  const { error } = await r.emails.send({ from, to, subject, html });
-
-  if (error) {
-    throw new Error(`Resend error: ${error.message}`);
-  }
+  await sgMail.send({ from, to, subject, html });
 }
