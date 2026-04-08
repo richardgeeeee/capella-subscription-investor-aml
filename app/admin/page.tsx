@@ -39,6 +39,8 @@ export default function AdminDashboard() {
   const [copied, setCopied] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [sendingLinkId, setSendingLinkId] = useState<string | null>(null);
+  const [sentLinkIds, setSentLinkIds] = useState<Set<string>>(new Set());
 
   const fetchLinks = useCallback(async () => {
     try {
@@ -124,6 +126,24 @@ export default function AdminDashboard() {
       alert(err instanceof Error ? err.message : 'Failed to send email');
     } finally {
       setSendingEmail(false);
+    }
+  };
+
+  const handleSendForLink = async (linkId: string) => {
+    setSendingLinkId(linkId);
+    try {
+      const res = await fetch('/api/admin/send-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      setSentLinkIds(prev => new Set(prev).add(linkId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send email');
+    } finally {
+      setSendingLinkId(null);
     }
   };
 
@@ -322,12 +342,34 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 text-gray-500">{new Date(link.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(link.expires_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/links/${link.id}`}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        View
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/links/${link.id}`}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          View
+                        </Link>
+                        {link.investor_email && (
+                          <button
+                            onClick={() => handleSendForLink(link.id)}
+                            disabled={sendingLinkId === link.id || sentLinkIds.has(link.id)}
+                            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                              sentLinkIds.has(link.id)
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                            }`}
+                            title={`Send invitation to ${link.investor_email}`}
+                          >
+                            {sentLinkIds.has(link.id) ? (
+                              <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Sent</>
+                            ) : sendingLinkId === link.id ? (
+                              'Sending...'
+                            ) : (
+                              <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>Send</>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
