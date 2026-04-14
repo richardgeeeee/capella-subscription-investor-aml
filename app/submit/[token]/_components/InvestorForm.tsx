@@ -13,6 +13,7 @@ interface InvestorFormProps {
   token: string;
   investorName: string;
   investorType: InvestorType;
+  shareClass: string | null;
   expiresAt: string;
   savedFormData: Record<string, string>;
   uploadedFiles: UploadedFileInfo[];
@@ -36,6 +37,7 @@ interface SectionDef {
 const INDIVIDUAL_FIELDS: SectionDef[] = [
   { section: 'section_subscription', fields: [
     { key: 'investorName', readOnly: true, required: true },
+    { key: 'shareClass', readOnly: true, required: true },
     { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
     { key: 'subscriptionAmount', required: true },
   ]},
@@ -68,6 +70,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
 const CORPORATE_FIELDS: SectionDef[] = [
   { section: 'section_subscription', fields: [
     { key: 'investorName', readOnly: true, required: true },
+    { key: 'shareClass', readOnly: true, required: true },
     { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
     { key: 'subscriptionAmount', required: true },
   ]},
@@ -97,6 +100,7 @@ export function InvestorForm({
   token,
   investorName,
   investorType,
+  shareClass,
   expiresAt,
   savedFormData,
   uploadedFiles: initialUploadedFiles,
@@ -104,10 +108,12 @@ export function InvestorForm({
   lastSubmittedAt: initialLastSubmittedAt,
 }: InvestorFormProps) {
   const [lang, setLang] = useState<Language>('zh');
-  const [formData, setFormData] = useState<Record<string, string>>({
-    investorName,
+  const [formData, setFormData] = useState<Record<string, string>>(() => ({
     ...savedFormData,
-  });
+    // Override with admin-set values (immutable on client)
+    investorName,
+    shareClass: shareClass || '',
+  }));
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>(initialUploadedFiles);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);

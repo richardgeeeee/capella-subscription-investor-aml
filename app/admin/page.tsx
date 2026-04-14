@@ -2,11 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { SHARE_CLASSES, type ShareClass } from '@/lib/constants';
 
 interface LinkData {
   id: string;
   token: string;
   investor_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  share_class: string | null;
+  sequence_number: number | null;
   investor_type: string;
   investor_email: string | null;
   expires_at: string;
@@ -28,7 +33,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AdminUser | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
+  const [newShareClass, setNewShareClass] = useState<ShareClass>('Class E');
   const [newEmail, setNewEmail] = useState('');
   const [newType, setNewType] = useState<'individual' | 'corporate'>('individual');
   const [newDays, setNewDays] = useState('30');
@@ -88,7 +95,9 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          investorName: newName,
+          firstName: newFirstName,
+          lastName: newLastName,
+          shareClass: newShareClass,
           investorType: newType,
           investorEmail: newEmail || undefined,
           expiresInDays: parseInt(newDays),
@@ -101,7 +110,8 @@ export default function AdminDashboard() {
       setCreatedUrl(data.url);
       setCreatedLinkId(data.id);
       setCreatedEmail(newEmail);
-      setNewName('');
+      setNewFirstName('');
+      setNewLastName('');
       setNewEmail('');
       fetchLinks();
     } catch (err) {
@@ -208,14 +218,25 @@ export default function AdminDashboard() {
             <h2 className="text-lg font-semibold mb-4">Generate Investor Link</h2>
             <form onSubmit={handleCreate} className="flex flex-wrap gap-4 items-end">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Investor Name</label>
+                <label className="block text-sm text-gray-600 mb-1">First Name</label>
                 <input
                   type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  value={newFirstName}
+                  onChange={(e) => setNewFirstName(e.target.value)}
                   required
                   className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                  placeholder="e.g. Gordon Ding"
+                  placeholder="e.g. Jin"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={newLastName}
+                  onChange={(e) => setNewLastName(e.target.value)}
+                  required
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                  placeholder="e.g. Zhang"
                 />
               </div>
               <div>
@@ -237,6 +258,19 @@ export default function AdminDashboard() {
                 >
                   <option value="individual">Individual</option>
                   <option value="corporate">Corporate</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Share Class</label>
+                <select
+                  value={newShareClass}
+                  onChange={(e) => setNewShareClass(e.target.value as ShareClass)}
+                  required
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                >
+                  {SHARE_CLASSES.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -320,8 +354,10 @@ export default function AdminDashboard() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">#</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Type</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Sync</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Created</th>
@@ -332,11 +368,13 @@ export default function AdminDashboard() {
               <tbody className="divide-y">
                 {links.map((link) => (
                   <tr key={link.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-500 text-xs">{link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{link.investor_name}</div>
                       {link.investor_email && <div className="text-xs text-gray-400">{link.investor_email}</div>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 capitalize">{link.investor_type}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{link.share_class || '-'}</td>
                     <td className="px-4 py-3">{getStatusBadge(link)}</td>
                     <td className="px-4 py-3 text-gray-600">{link.latest_sync_status || '-'}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(link.created_at).toLocaleDateString()}</td>
@@ -375,7 +413,7 @@ export default function AdminDashboard() {
                 ))}
                 {links.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       No investor links yet. Click &quot;+ New Link&quot; to create one.
                     </td>
                   </tr>

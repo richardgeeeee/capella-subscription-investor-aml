@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
             id: f.id,
             document_type: f.document_type,
             original_name: f.original_name,
+            display_name: f.display_name,
             file_size: f.file_size,
           })),
       })),

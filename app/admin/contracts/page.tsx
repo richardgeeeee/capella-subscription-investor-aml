@@ -7,11 +7,18 @@ import { useSearchParams } from 'next/navigation';
 interface Template {
   id: string;
   name: string;
+  kind: string;
   investor_type: string;
   file_type: string;
   original_name: string;
   created_at: string;
 }
+
+const KIND_LABELS: Record<string, string> = {
+  client_agreement: 'Client Agreement',
+  subscription_agreement: 'Subscription Agreement',
+  other: 'Other',
+};
 
 export default function ContractsPage() {
   return (
@@ -33,6 +40,7 @@ function ContractsContent() {
   // Upload form state
   const [showUpload, setShowUpload] = useState(false);
   const [uploadName, setUploadName] = useState('');
+  const [uploadKind, setUploadKind] = useState<string>('other');
   const [uploadType, setUploadType] = useState<string>(investorType || 'individual');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [mappings, setMappings] = useState<Array<{ placeholder: string; formField: string }>>([{ placeholder: '', formField: '' }]);
@@ -64,6 +72,7 @@ function ContractsContent() {
     try {
       const formData = new FormData();
       formData.append('name', uploadName);
+      formData.append('kind', uploadKind);
       formData.append('investorType', uploadType);
       formData.append('file', uploadFile);
       formData.append('mappings', JSON.stringify(mappings.filter(m => m.placeholder && m.formField)));
@@ -161,7 +170,7 @@ function ContractsContent() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-4">Upload Contract Template</h2>
             <form onSubmit={handleUpload} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Template Name</label>
                   <input
@@ -170,8 +179,20 @@ function ContractsContent() {
                     onChange={(e) => setUploadName(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                    placeholder="e.g. Individual Subscription Agreement"
+                    placeholder="e.g. Individual Client Agreement"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Kind</label>
+                  <select
+                    value={uploadKind}
+                    onChange={(e) => setUploadKind(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                  >
+                    <option value="client_agreement">Client Agreement</option>
+                    <option value="subscription_agreement">Subscription Agreement</option>
+                    <option value="other">Other</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Investor Type</label>
@@ -254,6 +275,7 @@ function ContractsContent() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Name</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Kind</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Format</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">File</th>
@@ -265,6 +287,7 @@ function ContractsContent() {
                 {filteredTemplates.map((tpl) => (
                   <tr key={tpl.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{tpl.name}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{KIND_LABELS[tpl.kind] || tpl.kind}</td>
                     <td className="px-4 py-3 text-gray-600 capitalize">{tpl.investor_type}</td>
                     <td className="px-4 py-3 text-gray-600 uppercase">{tpl.file_type}</td>
                     <td className="px-4 py-3 text-gray-500">{tpl.original_name}</td>
@@ -284,7 +307,7 @@ function ContractsContent() {
                 ))}
                 {filteredTemplates.length === 0 && (
                   <tr>
-                    <td colSpan={submissionId ? 6 : 5} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={submissionId ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
                       No templates found.
                     </td>
                   </tr>

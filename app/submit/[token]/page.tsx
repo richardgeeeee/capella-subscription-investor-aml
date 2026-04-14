@@ -50,6 +50,7 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
       token={token}
       investorName={link.investor_name}
       investorType={link.investor_type}
+      shareClass={link.share_class}
       expiresAt={link.expires_at}
       savedFormData={savedFormData}
       uploadedFiles={uploadedFiles}

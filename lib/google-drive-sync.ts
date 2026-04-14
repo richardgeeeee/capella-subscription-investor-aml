@@ -1,11 +1,15 @@
 import fs from 'fs';
+import path from 'path';
 import {
   getSubmissionById,
   getFilesByLinkId,
   getLinkById,
   updateSubmissionSyncStatus,
   updateFileSyncStatus,
+  getSubmissionVersions,
+  type LinkRow,
 } from '@/db';
+import { formatDriveFolderName, formatDisplayName } from '@/lib/file-naming';
 
 const GAS_WEB_APP_URL = process.env.GAS_WEB_APP_URL;
 const GAS_API_KEY = process.env.GAS_API_KEY;
@@ -29,20 +33,26 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
   }
 
   updateSubmissionSyncStatus(submissionId, 'syncing');
+  const folderName = formatDriveFolderName(link.first_name, link.last_name, link.investor_name, link.sequence_number);
 
   try {
-    // 1. Sync form data as JSON
-    const formDataBlob = new Blob([submission.form_data], { type: 'application/json' });
-    const formDataFile = new File([formDataBlob], `${link.investor_name}_form_data.json`, { type: 'application/json' });
+    // 1. Sync form data as JSON snapshot of the latest version
+    const versions = getSubmissionVersions(submissionId);
+    const latestVersion = versions[0];
+    const formDataJson = latestVersion?.form_data || submission.form_data;
+    const versionLabel = latestVersion ? `_v${latestVersion.version_number}` : '';
+    const formFileName = `${folderName}-Form Data${versionLabel}.json`;
+    const formBlob = new Blob([formDataJson], { type: 'application/json' });
+    const formFile = new File([formBlob], formFileName, { type: 'application/json' });
 
     await uploadFileToGAS({
-      investorName: link.investor_name,
-      fileName: formDataFile.name,
+      folderName,
+      fileName: formFileName,
       documentType: 'form_data',
-      file: formDataFile,
+      file: formFile,
     });
 
-    // 2. Sync uploaded files
+    // 2. Sync uploaded files (skip already synced)
     const files = getFilesByLinkId(link.id);
     for (const fileRecord of files) {
       if (fileRecord.drive_sync_status === 'synced') continue;
@@ -51,11 +61,13 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
         updateFileSyncStatus(fileRecord.id, 'syncing');
 
         const fileBuffer = fs.readFileSync(fileRecord.stored_path);
-        const file = new File([fileBuffer], fileRecord.original_name, { type: fileRecord.mime_type });
+        const fileName = fileRecord.display_name
+          || formatDisplayName(link.first_name, link.last_name, link.investor_name, fileRecord.document_type, fileRecord.original_name);
+        const file = new File([fileBuffer], fileName, { type: fileRecord.mime_type });
 
         const result = await uploadFileToGAS({
-          investorName: link.investor_name,
-          fileName: fileRecord.original_name,
+          folderName,
+          fileName,
           documentType: fileRecord.document_type,
           file,
         });
@@ -67,6 +79,9 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
       }
     }
 
+    // 3. Sync any draft agreement files in /app/data/drafts/{linkId}/
+    await syncDraftAgreements(link, folderName);
+
     updateSubmissionSyncStatus(submissionId, 'synced');
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -75,15 +90,37 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
   }
 }
 
+async function syncDraftAgreements(link: LinkRow, folderName: string): Promise<void> {
+  const draftDir = path.join(process.env.DATABASE_PATH ? path.dirname(process.env.DATABASE_PATH) : './data', 'drafts', link.id);
+  if (!fs.existsSync(draftDir)) return;
+
+  const files = fs.readdirSync(draftDir);
+  for (const fileName of files) {
+    const filePath = path.join(draftDir, fileName);
+    if (!fs.statSync(filePath).isFile()) continue;
+
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const mimeType = fileName.endsWith('.docx')
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : fileName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
+      const file = new File([buffer], fileName, { type: mimeType });
+      await uploadFileToGAS({ folderName, fileName, documentType: 'draft_agreement', file });
+    } catch (err) {
+      console.error(`[Google Drive Sync] Failed to sync draft agreement ${fileName}:`, err);
+    }
+  }
+}
+
 async function uploadFileToGAS(params: {
-  investorName: string;
+  folderName: string;
   fileName: string;
   documentType: string;
   file: File;
 }): Promise<{ fileId?: string } | null> {
   const formData = new FormData();
   formData.append('apiKey', GAS_API_KEY!);
-  formData.append('investorName', params.investorName);
+  formData.append('folderName', params.folderName);
   formData.append('fileName', params.fileName);
   formData.append('documentType', params.documentType);
   formData.append('file', params.file);

@@ -25,12 +25,17 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const name = formData.get('name') as string;
+  const kind = (formData.get('kind') as string) || 'other';
   const investorType = formData.get('investorType') as string;
   const file = formData.get('file') as File;
   const mappingsJson = formData.get('mappings') as string;
 
   if (!name || !investorType || !file) {
     return NextResponse.json({ error: 'name, investorType, and file are required' }, { status: 400 });
+  }
+
+  if (!['client_agreement', 'subscription_agreement', 'other'].includes(kind)) {
+    return NextResponse.json({ error: 'Invalid kind' }, { status: 400 });
   }
 
   if (!['individual', 'corporate'].includes(investorType)) {
@@ -56,6 +61,7 @@ export async function POST(request: Request) {
   createContractTemplate({
     id: templateId,
     name,
+    kind,
     investorType: investorType as 'individual' | 'corporate',
     filePath,
     fileType,

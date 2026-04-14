@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { createLink } from '@/db';
 import { generateToken } from '@/lib/token';
 import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
-import { DEFAULT_LINK_EXPIRY_DAYS } from '@/lib/constants';
+import { DEFAULT_LINK_EXPIRY_DAYS, SHARE_CLASSES } from '@/lib/constants';
 
 export async function POST(request: Request) {
   try {
@@ -15,16 +15,21 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { investorName, investorType, investorEmail, expiresInDays } = body;
+    const { firstName, lastName, shareClass, investorType, investorEmail, expiresInDays } = body;
 
-    if (!investorName || !investorType) {
-      return NextResponse.json({ error: 'investorName and investorType are required' }, { status: 400 });
+    if (!firstName || !lastName || !investorType) {
+      return NextResponse.json({ error: 'firstName, lastName, and investorType are required' }, { status: 400 });
     }
 
     if (!['individual', 'corporate'].includes(investorType)) {
       return NextResponse.json({ error: 'investorType must be "individual" or "corporate"' }, { status: 400 });
     }
 
+    if (shareClass && !SHARE_CLASSES.includes(shareClass)) {
+      return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
+    }
+
+    const investorName = `${firstName.trim()} ${lastName.trim()}`;
     const id = crypto.randomUUID();
     const token = generateToken();
     const days = expiresInDays || DEFAULT_LINK_EXPIRY_DAYS;
@@ -34,6 +39,9 @@ export async function POST(request: Request) {
       id,
       token,
       investorName,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      shareClass: shareClass || undefined,
       investorType,
       investorEmail,
       expiresAt,
@@ -47,6 +55,9 @@ export async function POST(request: Request) {
       token,
       url,
       investorName,
+      firstName,
+      lastName,
+      shareClass,
       investorType,
       expiresAt,
     });

@@ -8,7 +8,7 @@ interface VersionData {
   version_number: number;
   submitted_at: string;
   form_data: Record<string, string>;
-  files: { id: string; document_type: string; original_name: string; file_size: number }[];
+  files: { id: string; document_type: string; original_name: string; display_name: string | null; file_size: number }[];
 }
 
 interface SubmissionData {
@@ -27,6 +27,7 @@ interface FileData {
   id: string;
   document_type: string;
   original_name: string;
+  display_name: string | null;
   mime_type: string;
   file_size: number;
   uploaded_at: string;
@@ -36,9 +37,19 @@ interface FileData {
 interface LinkDetail {
   id: string;
   investor_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  share_class: string | null;
+  sequence_number: number | null;
   investor_type: string;
   expires_at: string;
   created_at: string;
+}
+
+interface DraftFile {
+  name: string;
+  size: number;
+  mtime: string;
 }
 
 export default function LinkDetailPage({ params }: { params: Promise<{ linkId: string }> }) {
@@ -46,20 +57,32 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [link, setLink] = useState<LinkDetail | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionData[]>([]);
   const [files, setFiles] = useState<FileData[]>([]);
+  const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [generatingDrafts, setGeneratingDrafts] = useState(false);
+  const [draftResult, setDraftResult] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/submissions?linkId=${linkId}`);
-      if (res.status === 401) {
+      const [submRes, draftRes] = await Promise.all([
+        fetch(`/api/admin/submissions?linkId=${linkId}`),
+        fetch(`/api/admin/generate-drafts?linkId=${linkId}`),
+      ]);
+      if (submRes.status === 401) {
         window.location.href = '/admin/login';
         return;
       }
-      const data = await res.json();
+      const data = await submRes.json();
       setLink(data.link);
       setSubmissions(data.submissions);
       setFiles(data.files);
+      if (draftRes.ok) {
+        const draftData = await draftRes.json();
+        setDrafts(draftData.files || []);
+      }
     } catch (err) {
       console.error('Failed to fetch:', err);
     } finally {
@@ -68,6 +91,52 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   }, [linkId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleSyncToDrive = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/admin/sync-to-drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSyncResult('Successfully synced to Google Drive');
+      fetchData();
+    } catch (err) {
+      setSyncResult(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleGenerateDrafts = async () => {
+    setGeneratingDrafts(true);
+    setDraftResult(null);
+    try {
+      const res = await fetch('/api/admin/generate-drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const successCount = data.generated?.length || 0;
+      const errorCount = data.errors?.length || 0;
+      setDraftResult(
+        errorCount > 0
+          ? `Generated ${successCount}; ${errorCount} failed: ${data.errors.map((e: { kind: string; error: string }) => `${e.kind}: ${e.error}`).join('; ')}`
+          : `Generated ${successCount} draft agreement(s)`
+      );
+      fetchData();
+    } catch (err) {
+      setDraftResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setGeneratingDrafts(false);
+    }
+  };
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -92,6 +161,80 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Investor metadata + actions */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+            <div>
+              <p className="text-xs text-gray-500">Sequence</p>
+              <p className="font-medium text-gray-900">
+                {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">First / Last Name</p>
+              <p className="font-medium text-gray-900">
+                {link.first_name || '?'} / {link.last_name || '?'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Share Class</p>
+              <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Drive Folder</p>
+              <p className="font-medium text-gray-900 text-xs">
+                {link.sequence_number && link.first_name && link.last_name
+                  ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
+                  : '-'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
+            <button
+              onClick={handleSyncToDrive}
+              disabled={syncing || !latestSubmission}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {syncing ? 'Syncing...' : 'Sync to Google Drive'}
+            </button>
+            <button
+              onClick={handleGenerateDrafts}
+              disabled={generatingDrafts || !latestSubmission}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
+            >
+              {generatingDrafts ? 'Generating...' : 'Generate Draft Agreements'}
+            </button>
+          </div>
+          {syncResult && <p className="mt-2 text-xs text-gray-600">{syncResult}</p>}
+          {draftResult && <p className="mt-2 text-xs text-gray-600">{draftResult}</p>}
+        </div>
+
+        {/* Draft Agreements */}
+        {drafts.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Draft Agreements ({drafts.length})</h2>
+            <div className="space-y-2">
+              {drafts.map((d) => (
+                <div key={d.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{d.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatSize(d.size)} &middot; Generated {new Date(d.mtime).toLocaleString()}
+                    </p>
+                  </div>
+                  <a
+                    href={`/api/admin/drafts/${linkId}/${encodeURIComponent(d.name)}`}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                    download
+                  >
+                    Download
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Current Form Data */}
         {latestSubmission && (
           <div className="bg-white rounded-lg shadow p-6">
@@ -183,7 +326,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                             <div className="space-y-1">
                               {version.files.map(f => (
                                 <div key={f.id} className="flex items-center justify-between bg-white p-2 rounded border text-xs">
-                                  <span className="text-gray-900">{f.original_name}</span>
+                                  <span className="text-gray-900">{f.display_name || f.original_name}</span>
                                   <div className="flex items-center gap-2">
                                     <span className="text-gray-500">{f.document_type}</span>
                                     <span className="text-gray-400">{formatSize(f.file_size)}</span>
@@ -213,9 +356,12 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               {files.map((file) => (
                 <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{file.original_name}</p>
+                    <p className="text-sm font-medium text-gray-900">{file.display_name || file.original_name}</p>
                     <p className="text-xs text-gray-500">
                       {file.document_type} &middot; {formatSize(file.file_size)} &middot; {new Date(file.uploaded_at).toLocaleString()}
+                      {file.display_name && file.display_name !== file.original_name && (
+                        <span className="ml-2 text-gray-400">(uploaded as: {file.original_name})</span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

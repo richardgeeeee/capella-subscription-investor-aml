@@ -38,6 +38,9 @@ export const CORPORATE_DOCUMENT_TYPES = [
   { key: 'personnel_address_proof', required: true, multiple: true },
 ] as const;
 
+export const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'] as const;
+export type ShareClass = typeof SHARE_CLASSES[number];
+
 export const DEFAULT_LINK_EXPIRY_DAYS = 30;
 export const SESSION_EXPIRY_DAYS = 7;
 export const VERIFICATION_CODE_EXPIRY_MINUTES = 10;

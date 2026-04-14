@@ -24,10 +24,11 @@ export async function GET(
   }
 
   const buffer = fs.readFileSync(file.stored_path);
+  const downloadName = file.display_name || file.original_name;
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': file.mime_type,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(file.original_name)}"`,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadName)}"`,
       'Content-Length': String(buffer.length),
     },
   });

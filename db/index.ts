@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS links (
     id              TEXT PRIMARY KEY,
     token           TEXT UNIQUE NOT NULL,
     investor_name   TEXT NOT NULL,
+    first_name      TEXT,
+    last_name       TEXT,
+    share_class     TEXT,
+    sequence_number INTEGER,
     investor_type   TEXT NOT NULL CHECK(investor_type IN ('individual', 'corporate')),
     investor_email  TEXT,
     expires_at      TEXT NOT NULL,
@@ -54,6 +58,7 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     submission_id   TEXT REFERENCES submissions(id),
     document_type   TEXT NOT NULL,
     original_name   TEXT NOT NULL,
+    display_name    TEXT,
     stored_path     TEXT NOT NULL,
     mime_type       TEXT NOT NULL,
     file_size       INTEGER NOT NULL,
@@ -70,6 +75,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
 CREATE TABLE IF NOT EXISTS contract_templates (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
+    kind            TEXT NOT NULL DEFAULT 'other',
     investor_type   TEXT NOT NULL CHECK(investor_type IN ('individual', 'corporate')),
     file_path       TEXT NOT NULL,
     file_type       TEXT NOT NULL CHECK(file_type IN ('pdf', 'docx')),
@@ -120,9 +126,39 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.exec(SCHEMA);
+    runMigrations(db);
     seedDefaultEmailTemplates(db);
   }
   return db;
+}
+
+function columnExists(db: Database.Database, table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return rows.some(r => r.name === column);
+}
+
+function runMigrations(db: Database.Database) {
+  // links table
+  if (!columnExists(db, 'links', 'first_name')) db.exec(`ALTER TABLE links ADD COLUMN first_name TEXT`);
+  if (!columnExists(db, 'links', 'last_name')) db.exec(`ALTER TABLE links ADD COLUMN last_name TEXT`);
+  if (!columnExists(db, 'links', 'share_class')) db.exec(`ALTER TABLE links ADD COLUMN share_class TEXT`);
+  if (!columnExists(db, 'links', 'sequence_number')) {
+    db.exec(`ALTER TABLE links ADD COLUMN sequence_number INTEGER`);
+    // Backfill: assign sequence numbers to existing rows by created_at order
+    const rows = db.prepare(`SELECT id FROM links ORDER BY created_at ASC`).all() as { id: string }[];
+    const update = db.prepare(`UPDATE links SET sequence_number = ? WHERE id = ?`);
+    rows.forEach((row, i) => update.run(i + 1, row.id));
+  }
+
+  // uploaded_files table
+  if (!columnExists(db, 'uploaded_files', 'display_name')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN display_name TEXT`);
+  }
+
+  // contract_templates table
+  if (!columnExists(db, 'contract_templates', 'kind')) {
+    db.exec(`ALTER TABLE contract_templates ADD COLUMN kind TEXT NOT NULL DEFAULT 'other'`);
+  }
 }
 
 function seedDefaultEmailTemplates(db: Database.Database) {
@@ -158,15 +194,33 @@ export function createLink(params: {
   id: string;
   token: string;
   investorName: string;
+  firstName?: string;
+  lastName?: string;
+  shareClass?: string;
   investorType: 'individual' | 'corporate';
   investorEmail?: string;
   expiresAt: string;
 }) {
   const db = getDb();
+  // Compute next sequence number atomically
+  const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
+  const sequenceNumber = maxRow.max + 1;
+
   return db.prepare(`
-    INSERT INTO links (id, token, investor_name, investor_type, investor_email, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(params.id, params.token, params.investorName, params.investorType, params.investorEmail?.toLowerCase() || null, params.expiresAt);
+    INSERT INTO links (id, token, investor_name, first_name, last_name, share_class, sequence_number, investor_type, investor_email, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.id,
+    params.token,
+    params.investorName,
+    params.firstName || null,
+    params.lastName || null,
+    params.shareClass || null,
+    sequenceNumber,
+    params.investorType,
+    params.investorEmail?.toLowerCase() || null,
+    params.expiresAt
+  );
 }
 
 export function getLinkByToken(token: string) {
@@ -341,15 +395,26 @@ export function createUploadedFile(params: {
   submissionId?: string;
   documentType: string;
   originalName: string;
+  displayName?: string;
   storedPath: string;
   mimeType: string;
   fileSize: number;
 }) {
   const db = getDb();
   return db.prepare(`
-    INSERT INTO uploaded_files (id, link_id, submission_id, document_type, original_name, stored_path, mime_type, file_size)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(params.id, params.linkId, params.submissionId || null, params.documentType, params.originalName, params.storedPath, params.mimeType, params.fileSize);
+    INSERT INTO uploaded_files (id, link_id, submission_id, document_type, original_name, display_name, stored_path, mime_type, file_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.id,
+    params.linkId,
+    params.submissionId || null,
+    params.documentType,
+    params.originalName,
+    params.displayName || null,
+    params.storedPath,
+    params.mimeType,
+    params.fileSize
+  );
 }
 
 export function getFilesByLinkId(linkId: string) {
@@ -391,6 +456,7 @@ export function createAdminUser(params: { id: string; username: string; password
 export function createContractTemplate(params: {
   id: string;
   name: string;
+  kind?: string;
   investorType: 'individual' | 'corporate';
   filePath: string;
   fileType: 'pdf' | 'docx';
@@ -398,9 +464,25 @@ export function createContractTemplate(params: {
 }) {
   const db = getDb();
   return db.prepare(`
-    INSERT INTO contract_templates (id, name, investor_type, file_path, file_type, original_name)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(params.id, params.name, params.investorType, params.filePath, params.fileType, params.originalName);
+    INSERT INTO contract_templates (id, name, kind, investor_type, file_path, file_type, original_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.id,
+    params.name,
+    params.kind || 'other',
+    params.investorType,
+    params.filePath,
+    params.fileType,
+    params.originalName
+  );
+}
+
+export function getTemplatesByLinkAndKind(investorType: 'individual' | 'corporate', kind: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM contract_templates WHERE investor_type = ? AND kind = ?
+    ORDER BY created_at DESC
+  `).all(investorType, kind) as ContractTemplateRow[];
 }
 
 export function getAllContractTemplates() {
@@ -478,6 +560,10 @@ export interface LinkRow {
   id: string;
   token: string;
   investor_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  share_class: string | null;
+  sequence_number: number | null;
   investor_type: 'individual' | 'corporate';
   investor_email: string | null;
   expires_at: string;
@@ -523,6 +609,7 @@ export interface UploadedFileRow {
   submission_id: string | null;
   document_type: string;
   original_name: string;
+  display_name: string | null;
   stored_path: string;
   mime_type: string;
   file_size: number;
@@ -541,6 +628,7 @@ export interface AdminUserRow {
 export interface ContractTemplateRow {
   id: string;
   name: string;
+  kind: string;
   investor_type: 'individual' | 'corporate';
   file_path: string;
   file_type: 'pdf' | 'docx';

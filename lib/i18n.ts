@@ -9,6 +9,7 @@ export const labels: Record<string, { en: string; zh: string }> = {
 
   // -- Subscription fields --
   investorName: { en: 'Full Name of Investor', zh: '投资者全名' },
+  shareClass: { en: 'Share Class', zh: '基金份额类别' },
   subscriptionDate: { en: 'Date of Subscription', zh: '申购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
 

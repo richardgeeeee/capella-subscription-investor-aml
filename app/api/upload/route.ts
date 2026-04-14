@@ -6,6 +6,7 @@ import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
 import { createUploadedFile, getOrCreateSubmission, getFilesByLinkId, deleteFileById, getSubmissionVersions } from '@/db';
 import { MAX_FILE_SIZE, ACCEPTED_MIME_TYPES } from '@/lib/constants';
+import { formatDisplayName } from '@/lib/file-naming';
 
 export async function POST(request: Request) {
   const session = await getSessionFromCookie();
@@ -84,13 +85,31 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(storedPath, buffer);
 
+  // Compute display name. For multiple-file types (personnel_*), append a sequence
+  // suffix so multiple files of the same type get distinct names.
+  const link = result.link!;
+  let sequenceSuffix: number | undefined;
+  if (isMultiple) {
+    const existing = getFilesByLinkId(link.id).filter(f => f.document_type === documentType);
+    sequenceSuffix = existing.length + 1;
+  }
+  const displayName = formatDisplayName(
+    link.first_name,
+    link.last_name,
+    link.investor_name,
+    documentType,
+    file.name,
+    sequenceSuffix
+  );
+
   // Create DB record
   createUploadedFile({
     id: fileId,
-    linkId: result.link!.id,
+    linkId: link.id,
     submissionId: submission.id,
     documentType,
     originalName: file.name,
+    displayName,
     storedPath,
     mimeType: file.type,
     fileSize: file.size,
@@ -100,6 +119,7 @@ export async function POST(request: Request) {
     success: true,
     fileId,
     originalName: file.name,
+    displayName,
     documentType,
     fileSize: file.size,
   });

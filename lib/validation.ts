@@ -18,6 +18,7 @@ const monthEndDate = z.string().min(1, 'Required').refine((value) => {
 
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),
+  shareClass: z.string().optional().default(''),
   subscriptionDate: monthEndDate,
   subscriptionAmount: z.string().min(1, 'Required'),
 });
