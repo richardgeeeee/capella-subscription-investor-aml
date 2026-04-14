@@ -81,17 +81,36 @@ function jsonResponse(obj) {
 }
 
 /**
- * Test function - run manually to verify setup
+ * Diagnostic - run manually to verify setup and find recent uploads
  */
 function testSetup() {
   var amlFolderId = PropertiesService.getScriptProperties().getProperty('AML_FOLDER_ID');
   var apiKey = PropertiesService.getScriptProperties().getProperty('API_KEY');
 
-  Logger.log('AML_FOLDER_ID: ' + (amlFolderId ? 'SET' : 'NOT SET'));
-  Logger.log('API_KEY: ' + (apiKey ? 'SET' : 'NOT SET'));
+  Logger.log('AML_FOLDER_ID: ' + (amlFolderId || 'NOT SET'));
+  Logger.log('API_KEY: ' + (apiKey ? '[SET, length=' + apiKey.length + ']' : 'NOT SET'));
+  Logger.log('Running as: ' + Session.getActiveUser().getEmail());
 
-  if (amlFolderId) {
+  if (!amlFolderId) return;
+
+  try {
     var folder = DriveApp.getFolderById(amlFolderId);
-    Logger.log('AML Folder name: ' + folder.getName());
+    Logger.log('AML Folder name: "' + folder.getName() + '"');
+    Logger.log('AML Folder URL: ' + folder.getUrl());
+
+    // List subfolders (should include what we synced)
+    var subfolders = folder.getFolders();
+    var count = 0;
+    Logger.log('--- Subfolders inside AML folder ---');
+    while (subfolders.hasNext() && count < 30) {
+      var sub = subfolders.next();
+      Logger.log('  [' + sub.getName() + '] url=' + sub.getUrl());
+      count++;
+    }
+    if (count === 0) {
+      Logger.log('  (no subfolders found)');
+    }
+  } catch (err) {
+    Logger.log('ERROR accessing AML folder: ' + err.toString());
   }
 }
