@@ -12,6 +12,14 @@ export const labels: Record<string, { en: string; zh: string }> = {
   shareClass: { en: 'Share Class', zh: '基金份额类别' },
   subscriptionDate: { en: 'Date of Subscription', zh: '申购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
+  footnote_subscription_amount: {
+    en: 'Minimum USD 100,000. Must be a multiple of USD 10,000.',
+    zh: '最低申购金额为 10 万美元，且必须为 1 万美元的整数倍。',
+  },
+  footnote_asset_proof_waived: {
+    en: 'Subscription amount exceeds USD 1,000,000 — liquid asset proof is not required.',
+    zh: '申购金额超过 100 万美元，无需提供流动资产证明。',
+  },
 
   // -- Individual fields --
   dateOfBirth: { en: 'Date of Birth', zh: '出生日期' },

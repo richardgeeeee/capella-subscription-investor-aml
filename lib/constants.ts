@@ -16,8 +16,12 @@ export const INDIVIDUAL_DOCUMENT_TYPES = [
   { key: 'passport_signature', required: true },
   { key: 'id_card', required: true },
   { key: 'address_proof', required: true },
-  { key: 'liquid_asset_proof', required: false }, // conditionally required
+  // Required unless subscription amount > USD 1,000,000 (enforced at finalize)
+  { key: 'liquid_asset_proof', required: true },
 ] as const;
+
+/** USD amount threshold above which liquid_asset_proof is waived */
+export const ASSET_PROOF_WAIVER_THRESHOLD = 1_000_000;
 
 export const CORPORATE_DOCUMENT_TYPES = [
   { key: 'certificate_of_incorporation', required: true },

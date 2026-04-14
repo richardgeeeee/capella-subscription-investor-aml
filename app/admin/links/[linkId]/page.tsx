@@ -23,6 +23,14 @@ interface SubmissionData {
   versions: VersionData[];
 }
 
+interface AddressVerification {
+  status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
+  user_address: string;
+  extracted_address: string;
+  reason: string;
+  checked_at: string;
+}
+
 interface FileData {
   id: string;
   document_type: string;
@@ -32,6 +40,7 @@ interface FileData {
   file_size: number;
   uploaded_at: string;
   drive_sync_status: string;
+  address_verification: AddressVerification | null;
 }
 
 interface LinkDetail {
@@ -150,6 +159,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const currentFormData = latestSubmission?.form_data || {};
   const versions = latestSubmission?.versions || [];
 
+  // Surface address mismatch from the most recent address_proof
+  const latestAddressProof = files
+    .filter(f => f.document_type === 'address_proof')
+    .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0];
+  const addressIssue = latestAddressProof?.address_verification?.status === 'mismatched'
+    ? latestAddressProof.address_verification
+    : null;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
@@ -208,6 +225,32 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           {syncResult && <p className="mt-2 text-xs text-gray-600">{syncResult}</p>}
           {draftResult && <p className="mt-2 text-xs text-gray-600">{draftResult}</p>}
         </div>
+
+        {/* Address verification warning */}
+        {addressIssue && (
+          <div className="bg-red-50 border border-red-300 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+              <div className="text-sm text-red-700 flex-1">
+                <p className="font-semibold">Address mismatch detected in the uploaded address proof</p>
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-red-500">User entered</p>
+                    <p className="text-sm">{addressIssue.user_address}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-red-500">Extracted from document</p>
+                    <p className="text-sm">{addressIssue.extracted_address || '(not found)'}</p>
+                  </div>
+                </div>
+                {addressIssue.reason && <p className="text-xs mt-2 text-red-600">{addressIssue.reason}</p>}
+                <p className="text-xs mt-2 text-red-500">
+                  Checked {new Date(addressIssue.checked_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Draft Agreements */}
         {drafts.length > 0 && (
@@ -354,9 +397,25 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           ) : (
             <div className="space-y-2">
               {files.map((file) => (
-                <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div key={file.id} className={`flex items-center justify-between p-3 rounded-lg ${
+                  file.address_verification?.status === 'mismatched' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'
+                }`}>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{file.display_name || file.original_name}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {file.display_name || file.original_name}
+                      {file.address_verification?.status === 'mismatched' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                          Address mismatch
+                        </span>
+                      )}
+                      {file.address_verification?.status === 'matched' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Address matched
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-gray-500">
                       {file.document_type} &middot; {formatSize(file.file_size)} &middot; {new Date(file.uploaded_at).toLocaleString()}
                       {file.display_name && file.display_name !== file.original_name && (

@@ -122,5 +122,6 @@ export async function POST(request: Request) {
     displayName,
     documentType,
     fileSize: file.size,
+    triggerAddressVerify: documentType === 'address_proof' && link.investor_type === 'individual',
   });
 }

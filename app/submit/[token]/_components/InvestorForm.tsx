@@ -39,7 +39,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'investorName', readOnly: true, required: true },
     { key: 'shareClass', readOnly: true, required: true },
     { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
-    { key: 'subscriptionAmount', required: true },
+    { key: 'subscriptionAmount', required: true, footnoteKey: 'footnote_subscription_amount' },
   ]},
   { section: 'section_investor', fields: [
     { key: 'dateOfBirth', type: 'date', required: true },
@@ -72,7 +72,7 @@ const CORPORATE_FIELDS: SectionDef[] = [
     { key: 'investorName', readOnly: true, required: true },
     { key: 'shareClass', readOnly: true, required: true },
     { key: 'subscriptionDate', type: 'month_end', required: true, footnoteKey: 'footnote_subscription_date' },
-    { key: 'subscriptionAmount', required: true },
+    { key: 'subscriptionAmount', required: true, footnoteKey: 'footnote_subscription_amount' },
   ]},
   { section: 'section_investor', fields: [
     { key: 'dateOfFormation', type: 'date', required: true },
@@ -122,10 +122,58 @@ export function InvestorForm({
   const [lastSubmittedAt, setLastSubmittedAt] = useState<string | null>(initialLastSubmittedAt);
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [addressVerification, setAddressVerification] = useState<{
+    status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
+    extracted_address: string;
+    reason: string;
+  } | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const verifyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Trigger Claude Vision address verification (debounced)
+  const triggerAddressVerify = useCallback((address: string, immediate = false) => {
+    if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current);
+    const run = async () => {
+      setAddressVerification({ status: 'pending', extracted_address: '', reason: '' });
+      try {
+        const res = await fetch('/api/submission/verify-address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, userAddress: address }),
+        });
+        const data = await res.json();
+        if (data.skipped) {
+          setAddressVerification(null);
+        } else if (data.verification) {
+          setAddressVerification(data.verification);
+        }
+      } catch {
+        setAddressVerification({ status: 'failed', extracted_address: '', reason: 'Network error' });
+      }
+    };
+    if (immediate) run();
+    else verifyTimerRef.current = setTimeout(run, 3000);
+  }, [token]);
+
+  // Load existing verification state on mount
+  useEffect(() => {
+    if (investorType !== 'individual') return;
+    fetch(`/api/submission/verify-address?token=${encodeURIComponent(token)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.verification) setAddressVerification(data.verification); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sections = investorType === 'individual' ? INDIVIDUAL_FIELDS : CORPORATE_FIELDS;
   const docTypes = investorType === 'individual' ? INDIVIDUAL_DOCUMENT_TYPES : CORPORATE_DOCUMENT_TYPES;
+
+  // Asset proof is waived when subscription amount > USD 1,000,000
+  const waivesAssetProof = (() => {
+    const raw = formData.subscriptionAmount || '';
+    const n = Number(raw.replace(/[^0-9.]/g, ''));
+    return !isNaN(n) && n > 1_000_000;
+  })();
 
   // Auto-save with debounce
   const autoSave = useCallback(async (data: Record<string, string>) => {
@@ -152,9 +200,15 @@ export function InvestorForm({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => autoSave(updated), 1000);
 
+      // Trigger address verification (debounced inside helper) when individual
+      // address or (for corporate) company address changes
+      if (investorType === 'individual' && key === 'residentialAddress') {
+        triggerAddressVerify(value);
+      }
+
       return updated;
     });
-  }, [autoSave]);
+  }, [autoSave, investorType, triggerAddressVerify]);
 
   const handleFileUploaded = useCallback((file: { id: string; originalName: string; fileSize: number; documentType: string }) => {
     setUploadedFiles(prev => {
@@ -182,7 +236,15 @@ export function InvestorForm({
         },
       ];
     });
-  }, []);
+
+    // Verify address immediately after address_proof upload
+    if (investorType === 'individual' && file.documentType === 'address_proof') {
+      const currentAddress = formData.residentialAddress || '';
+      if (currentAddress.trim()) {
+        triggerAddressVerify(currentAddress, true);
+      }
+    }
+  }, [investorType, formData.residentialAddress, triggerAddressVerify]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -220,10 +282,11 @@ export function InvestorForm({
     }
   };
 
-  // Cleanup timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current);
     };
   }, []);
 
@@ -347,6 +410,61 @@ export function InvestorForm({
               {t('footnote_asset_proof', lang)}
             </div>
           )}
+          {investorType === 'individual' && waivesAssetProof && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+              {t('footnote_asset_proof_waived', lang)}
+            </div>
+          )}
+
+          {/* Address verification banner */}
+          {investorType === 'individual' && addressVerification && (
+            <div className={`mb-4 p-3 border rounded-lg text-sm ${
+              addressVerification.status === 'matched'
+                ? 'bg-green-50 border-green-200 text-green-700'
+                : addressVerification.status === 'mismatched'
+                ? 'bg-red-50 border-red-300 text-red-700'
+                : addressVerification.status === 'pending'
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-gray-50 border-gray-200 text-gray-600'
+            }`}>
+              <div className="flex items-start gap-2">
+                {addressVerification.status === 'matched' && (
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                )}
+                {addressVerification.status === 'mismatched' && (
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                )}
+                {addressVerification.status === 'pending' && (
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                )}
+                <div className="flex-1">
+                  {addressVerification.status === 'matched' && (
+                    <p className="font-medium">地址核对通过 / Address matches the uploaded proof.</p>
+                  )}
+                  {addressVerification.status === 'mismatched' && (
+                    <>
+                      <p className="font-medium">
+                        地址不匹配 / Address does not match the uploaded proof
+                      </p>
+                      <p className="text-xs mt-1">
+                        文件中读取到 / Found on document: <code className="bg-white px-1 rounded">{addressVerification.extracted_address || '(not found)'}</code>
+                      </p>
+                      {addressVerification.reason && <p className="text-xs mt-1 opacity-80">{addressVerification.reason}</p>}
+                      <p className="text-xs mt-2">
+                        您仍可保存草稿和提交；请确保地址证明与填写的地址一致。/ You can still save and submit, but please make sure the address matches.
+                      </p>
+                    </>
+                  )}
+                  {addressVerification.status === 'pending' && (
+                    <p>正在核对地址... / Verifying address...</p>
+                  )}
+                  {addressVerification.status === 'failed' && (
+                    <p className="text-xs">地址核对服务暂时不可用 / Address verification is temporarily unavailable.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {investorType === 'corporate' && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
               {t('footnote_corporate_asset', lang)}
@@ -356,13 +474,16 @@ export function InvestorForm({
           {docTypes.map((doc) => {
             const existingFile = uploadedFiles.find(f => f.documentType === doc.key);
             const isMultiple = 'multiple' in doc && doc.multiple;
+            // liquid_asset_proof is waived if subscription amount > USD 1M
+            const isAssetProof = doc.key === 'liquid_asset_proof';
+            const required = isAssetProof && waivesAssetProof ? false : doc.required;
             return (
               <FileDropzone
                 key={doc.key}
                 token={token}
                 documentType={doc.key}
                 label={t(doc.key, lang)}
-                required={doc.required}
+                required={required}
                 existingFile={existingFile ? {
                   id: existingFile.id,
                   originalName: existingFile.originalName,

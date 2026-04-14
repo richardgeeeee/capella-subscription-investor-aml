@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     file_size       INTEGER NOT NULL,
     uploaded_at     TEXT NOT NULL DEFAULT (datetime('now')),
     drive_sync_status TEXT NOT NULL DEFAULT 'pending',
-    drive_file_id   TEXT
+    drive_file_id   TEXT,
+    address_verification TEXT
 );
 CREATE TABLE IF NOT EXISTS admin_users (
     id              TEXT PRIMARY KEY,
@@ -153,6 +154,9 @@ function runMigrations(db: Database.Database) {
   // uploaded_files table
   if (!columnExists(db, 'uploaded_files', 'display_name')) {
     db.exec(`ALTER TABLE uploaded_files ADD COLUMN display_name TEXT`);
+  }
+  if (!columnExists(db, 'uploaded_files', 'address_verification')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN address_verification TEXT`);
   }
 
   // contract_templates table
@@ -616,6 +620,30 @@ export interface UploadedFileRow {
   uploaded_at: string;
   drive_sync_status: string;
   drive_file_id: string | null;
+  address_verification: string | null;
+}
+
+export interface AddressVerification {
+  status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
+  user_address: string;
+  extracted_address: string;
+  reason: string;
+  checked_at: string;
+}
+
+export function updateAddressVerification(fileId: string, verification: AddressVerification) {
+  const db = getDb();
+  return db.prepare(`UPDATE uploaded_files SET address_verification = ? WHERE id = ?`)
+    .run(JSON.stringify(verification), fileId);
+}
+
+export function getLatestAddressProofFile(linkId: string) {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM uploaded_files
+    WHERE link_id = ? AND document_type = 'address_proof'
+    ORDER BY uploaded_at DESC LIMIT 1
+  `).get(linkId) as UploadedFileRow | undefined;
 }
 
 export interface AdminUserRow {

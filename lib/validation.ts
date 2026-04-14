@@ -16,12 +16,33 @@ const monthEndDate = z.string().min(1, 'Required').refine((value) => {
   return d === lastDay;
 }, 'Subscription date must be the last day of a month');
 
+/** Accepts "100000", "100,000", "$100,000", "100000.00" etc. */
+function parseAmount(raw: string): number {
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  if (!cleaned) return NaN;
+  return Number(cleaned);
+}
+
+const subscriptionAmount = z.string().min(1, 'Required').refine((value) => {
+  const n = parseAmount(value);
+  if (isNaN(n)) return false;
+  if (n < 100_000) return false;
+  if (n % 10_000 !== 0) return false;
+  return true;
+}, 'Amount must be at least USD 100,000 and a multiple of USD 10,000');
+
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),
   shareClass: z.string().optional().default(''),
   subscriptionDate: monthEndDate,
-  subscriptionAmount: z.string().min(1, 'Required'),
+  subscriptionAmount,
 });
+
+export function amountQualifiesForAssetProofWaiver(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const n = parseAmount(raw);
+  return !isNaN(n) && n > 1_000_000;
+}
 
 export const individualFormSchema = subscriptionSchema.merge(paymentSchema).extend({
   dateOfBirth: z.string().min(1, 'Required'),

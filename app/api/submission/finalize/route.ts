@@ -7,7 +7,7 @@ import {
   getFilesByLinkId,
   createSubmissionVersion,
 } from '@/db';
-import { individualFormSchema, corporateFormSchema } from '@/lib/validation';
+import { individualFormSchema, corporateFormSchema, amountQualifiesForAssetProofWaiver } from '@/lib/validation';
 import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES } from '@/lib/constants';
 import { syncSubmissionToGoogleDrive } from '@/lib/google-drive-sync';
 
@@ -54,9 +54,16 @@ export async function POST(request: Request) {
     ? INDIVIDUAL_DOCUMENT_TYPES
     : CORPORATE_DOCUMENT_TYPES;
 
+  // Individual: liquid_asset_proof is waived when subscription amount > USD 1,000,000
+  const waivesAssetProof = result.link!.investor_type === 'individual'
+    && amountQualifiesForAssetProofWaiver(formData.subscriptionAmount);
+
   const missingDocs: string[] = [];
   for (const doc of requiredDocs) {
-    if (!doc.required) continue;
+    const required = doc.key === 'liquid_asset_proof'
+      ? (!waivesAssetProof)
+      : doc.required;
+    if (!required) continue;
     if ('multiple' in doc && doc.multiple) {
       if (!files.some(f => f.document_type.startsWith(doc.key))) {
         missingDocs.push(doc.key);

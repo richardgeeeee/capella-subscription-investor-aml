@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
   }
 
   const submissions = getSubmissionsByLinkId(linkId);
-  const files = getFilesByLinkId(linkId);
+  const files = getFilesByLinkId(linkId).map(f => ({
+    ...f,
+    address_verification: f.address_verification ? JSON.parse(f.address_verification) : null,
+  }));
   const fileMap = new Map(files.map(f => [f.id, f]));
 
   const submissionsWithVersions = submissions.map(s => {

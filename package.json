@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "@hookform/resolvers": "^5.2.2",
     "@sendgrid/mail": "^8.1.6",
     "bcryptjs": "^3.0.3",
