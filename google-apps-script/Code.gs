@@ -98,17 +98,18 @@ function testSetup() {
     Logger.log('AML Folder name: "' + folder.getName() + '"');
     Logger.log('AML Folder URL: ' + folder.getUrl());
 
-    // List subfolders (should include what we synced)
+    // List most-recently-created subfolders
     var subfolders = folder.getFolders();
-    var count = 0;
-    Logger.log('--- Subfolders inside AML folder ---');
-    while (subfolders.hasNext() && count < 30) {
+    var list = [];
+    while (subfolders.hasNext()) {
       var sub = subfolders.next();
-      Logger.log('  [' + sub.getName() + '] url=' + sub.getUrl());
-      count++;
+      list.push({ name: sub.getName(), created: sub.getDateCreated(), url: sub.getUrl() });
     }
-    if (count === 0) {
-      Logger.log('  (no subfolders found)');
+    list.sort(function (a, b) { return b.created - a.created; });
+    Logger.log('--- ' + list.length + ' subfolders total; 10 most recent ---');
+    for (var i = 0; i < Math.min(10, list.length); i++) {
+      var f = list[i];
+      Logger.log('  ' + f.created.toISOString() + ' [' + f.name + '] ' + f.url);
     }
   } catch (err) {
     Logger.log('ERROR accessing AML folder: ' + err.toString());
