@@ -39,6 +39,8 @@ export default function AdminDashboard() {
   const [newEmail, setNewEmail] = useState('');
   const [newType, setNewType] = useState<'individual' | 'corporate'>('individual');
   const [newDays, setNewDays] = useState('30');
+  const [newSequence, setNewSequence] = useState('');
+  const [suggestedSequence, setSuggestedSequence] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [createdUrl, setCreatedUrl] = useState('');
   const [createdLinkId, setCreatedLinkId] = useState('');
@@ -70,6 +72,9 @@ export default function AdminDashboard() {
     fetch('/api/admin/session').then(r => r.ok ? r.json() : null).then(data => {
       if (data?.authenticated) setUser(data);
     });
+    fetch('/api/admin/next-sequence').then(r => r.ok ? r.json() : null).then(data => {
+      if (typeof data?.next === 'number') setSuggestedSequence(data.next);
+    });
   }, [fetchLinks]);
 
   const handleCopy = (url: string) => {
@@ -98,6 +103,7 @@ export default function AdminDashboard() {
           firstName: newFirstName,
           lastName: newLastName,
           shareClass: newShareClass,
+          sequenceNumber: newSequence ? parseInt(newSequence) : undefined,
           investorType: newType,
           investorEmail: newEmail || undefined,
           expiresInDays: parseInt(newDays),
@@ -113,7 +119,12 @@ export default function AdminDashboard() {
       setNewFirstName('');
       setNewLastName('');
       setNewEmail('');
+      setNewSequence('');
       fetchLinks();
+      // Refresh suggested sequence
+      fetch('/api/admin/next-sequence').then(r => r.ok ? r.json() : null).then(d => {
+        if (typeof d?.next === 'number') setSuggestedSequence(d.next);
+      });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create link');
     } finally {
@@ -272,6 +283,20 @@ export default function AdminDashboard() {
                     <option key={cls} value={cls}>{cls}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Sequence #
+                  {suggestedSequence != null && <span className="text-gray-400 ml-1">(auto: {suggestedSequence})</span>}
+                </label>
+                <input
+                  type="number"
+                  value={newSequence}
+                  onChange={(e) => setNewSequence(e.target.value)}
+                  min="1"
+                  className="px-3 py-2 border border-gray-300 rounded-lg w-28 text-gray-900"
+                  placeholder={suggestedSequence != null ? String(suggestedSequence) : 'auto'}
+                />
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Expiry (days)</label>

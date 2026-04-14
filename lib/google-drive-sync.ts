@@ -121,16 +121,20 @@ async function uploadFileToGAS(params: {
   documentType: string;
   file: File;
 }): Promise<{ fileId?: string } | null> {
-  const formData = new FormData();
-  formData.append('apiKey', GAS_API_KEY!);
-  formData.append('folderName', params.folderName);
-  formData.append('fileName', params.fileName);
-  formData.append('documentType', params.documentType);
-  formData.append('file', params.file);
+  const arrayBuffer = await params.file.arrayBuffer();
+  const fileBase64 = Buffer.from(arrayBuffer).toString('base64');
 
   const response = await fetch(GAS_WEB_APP_URL!, {
     method: 'POST',
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      apiKey: GAS_API_KEY!,
+      folderName: params.folderName,
+      fileName: params.fileName,
+      documentType: params.documentType,
+      mimeType: params.file.type || 'application/octet-stream',
+      fileBase64,
+    }),
   });
 
   if (!response.ok) {

@@ -201,14 +201,20 @@ export function createLink(params: {
   firstName?: string;
   lastName?: string;
   shareClass?: string;
+  sequenceNumber?: number;
   investorType: 'individual' | 'corporate';
   investorEmail?: string;
   expiresAt: string;
 }) {
   const db = getDb();
-  // Compute next sequence number atomically
-  const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
-  const sequenceNumber = maxRow.max + 1;
+  // If caller provides a sequence number, use it. Otherwise auto-increment
+  // from the current max. This lets the admin jump the sequence to match
+  // pre-existing folders (e.g. legacy manual numbering).
+  let sequenceNumber = params.sequenceNumber;
+  if (!sequenceNumber || sequenceNumber <= 0) {
+    const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
+    sequenceNumber = maxRow.max + 1;
+  }
 
   return db.prepare(`
     INSERT INTO links (id, token, investor_name, first_name, last_name, share_class, sequence_number, investor_type, investor_email, expires_at)
@@ -225,6 +231,13 @@ export function createLink(params: {
     params.investorEmail?.toLowerCase() || null,
     params.expiresAt
   );
+}
+
+/** Returns the suggested next sequence (max + 1) for UI placeholders */
+export function suggestNextSequence(): number {
+  const db = getDb();
+  const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
+  return maxRow.max + 1;
 }
 
 export function getLinkByToken(token: string) {

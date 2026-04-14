@@ -15,10 +15,14 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { firstName, lastName, shareClass, investorType, investorEmail, expiresInDays } = body;
+    const { firstName, lastName, shareClass, sequenceNumber, investorType, investorEmail, expiresInDays } = body;
 
     if (!firstName || !lastName || !investorType) {
       return NextResponse.json({ error: 'firstName, lastName, and investorType are required' }, { status: 400 });
+    }
+
+    if (sequenceNumber != null && (!Number.isInteger(sequenceNumber) || sequenceNumber <= 0)) {
+      return NextResponse.json({ error: 'sequenceNumber must be a positive integer' }, { status: 400 });
     }
 
     if (!['individual', 'corporate'].includes(investorType)) {
@@ -42,6 +46,7 @@ export async function POST(request: Request) {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       shareClass: shareClass || undefined,
+      sequenceNumber: sequenceNumber || undefined,
       investorType,
       investorEmail,
       expiresAt,
