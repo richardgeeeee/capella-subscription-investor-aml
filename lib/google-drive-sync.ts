@@ -137,5 +137,10 @@ async function uploadFileToGAS(params: {
     throw new Error(`GAS upload failed: ${response.status} ${response.statusText}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(`GAS rejected upload: ${result.error || 'unknown error'}. ` +
+      `Make sure you re-deployed the Apps Script Web App after updating the code (Manage deployments → New version).`);
+  }
+  return result;
 }
