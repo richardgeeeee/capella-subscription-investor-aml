@@ -1,11 +1,28 @@
 import fs from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
-let client: Anthropic | null = null;
+/**
+ * Address verification uses any OpenAI-compatible LLM endpoint.
+ * Configure via env vars:
+ * - LLM_API_KEY           — required
+ * - LLM_BASE_URL          — e.g. "https://open.bigmodel.cn/api/paas/v4"  (GLM / Zhipu)
+ *                         — or  "https://api.minimax.chat/v1"           (MiniMax)
+ * - LLM_VISION_MODEL      — model that accepts images (e.g. "glm-4v-plus", "glm-4.5v", "MiniMax-VL-01")
+ * - LLM_TEXT_MODEL        — text-only model used for PDF text extracts (e.g. "glm-4-plus", "abab6.5s-chat")
+ *
+ * For PDFs we try to extract the text layer first (cheaper + works for most
+ * utility bills / bank statements). If the PDF is a scanned image with no
+ * text layer we report status="skipped" so an admin can review manually.
+ */
 
-function getClient(): Anthropic {
+let client: OpenAI | null = null;
+
+function getClient(): OpenAI {
   if (!client) {
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    client = new OpenAI({
+      apiKey: process.env.LLM_API_KEY,
+      baseURL: process.env.LLM_BASE_URL,
+    });
   }
   return client;
 }
@@ -14,91 +31,129 @@ export interface AddressVerifyResult {
   match: boolean;
   extracted_address: string;
   reason: string;
+  /** If we could not attempt verification (e.g. scanned PDF w/o text) */
+  skipped?: boolean;
 }
 
-/**
- * Use Claude Vision to read the address from a document (image or PDF)
- * and compare it to the user-provided address. Handles Chinese and English
- * addresses and is tolerant of formatting differences.
- */
+const SYSTEM_PROMPT = `You verify an investor's address proof document (utility bill, bank statement, government letter, etc.).
+
+Rules:
+1. Find the residential/mailing address of the addressee in the document (NOT the company sending it).
+2. Compare it to the user-claimed address.
+3. Be lenient with formatting differences: word order ("Flat A 5/F" vs "5/F Flat A"), abbreviations, bilingual rendering, punctuation, spelling variants. Treat them as a match if they clearly refer to the same location.
+4. A mismatch means a different street, building, unit, city or country — not merely formatting differences.
+
+Respond with ONLY a JSON object (no markdown, no prose) in this exact shape:
+{"match": boolean, "extracted_address": "<address found>", "reason": "<one short sentence>"}`;
+
 export async function verifyAddressAgainstDocument(
   filePath: string,
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not configured');
+  if (!process.env.LLM_API_KEY || !process.env.LLM_BASE_URL) {
+    throw new Error('LLM_API_KEY and LLM_BASE_URL must be configured');
   }
 
-  const buffer = fs.readFileSync(filePath);
-  const base64 = buffer.toString('base64');
-
-  // Claude supports images (JPEG/PNG/GIF/WebP) and PDFs as document content blocks.
   const isPdf = mimeType === 'application/pdf';
   const isImage = mimeType.startsWith('image/');
 
-  if (!isPdf && !isImage) {
+  if (isPdf) return verifyPdf(filePath, userAddress);
+  if (isImage) return verifyImage(filePath, mimeType, userAddress);
+
+  return {
+    match: false,
+    extracted_address: '',
+    reason: `Unsupported file type for verification: ${mimeType}`,
+    skipped: true,
+  };
+}
+
+async function verifyImage(
+  filePath: string,
+  mimeType: string,
+  userAddress: string
+): Promise<AddressVerifyResult> {
+  const model = process.env.LLM_VISION_MODEL;
+  if (!model) throw new Error('LLM_VISION_MODEL is not configured');
+
+  const base64 = fs.readFileSync(filePath).toString('base64');
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
+  const response = await getClient().chat.completions.create({
+    model,
+    max_tokens: 500,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: dataUrl } },
+          { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
+        ],
+      },
+    ],
+  });
+
+  return parseResult(response.choices[0]?.message?.content || '');
+}
+
+async function verifyPdf(filePath: string, userAddress: string): Promise<AddressVerifyResult> {
+  const { PDFParse } = await import('pdf-parse');
+  const buffer = fs.readFileSync(filePath);
+  let text = '';
+  try {
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    const result = await parser.getText();
+    text = (result.text || '').trim();
+    await parser.destroy();
+  } catch {
+    text = '';
+  }
+
+  if (text.length < 50) {
     return {
       match: false,
       extracted_address: '',
-      reason: `Unsupported file type for verification: ${mimeType}`,
+      reason: 'PDF appears to be scanned (no text layer); manual review required.',
+      skipped: true,
     };
   }
 
-  const anthropic = getClient();
-  const userContent: Anthropic.Messages.ContentBlockParam[] = [];
+  const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL;
+  if (!model) throw new Error('LLM_TEXT_MODEL is not configured');
 
-  if (isPdf) {
-    userContent.push({
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-    });
-  } else {
-    userContent.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-        data: base64,
-      },
-    });
-  }
+  // Cap text length to avoid huge inputs — first 6000 chars is plenty for an address
+  const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
 
-  userContent.push({
-    type: 'text',
-    text: `You are verifying an investor's address proof document (e.g. utility bill, bank statement, government letter).
-
-The user claims their residential address is:
-"""
-${userAddress}
-"""
-
-Please:
-1. Extract the residential/mailing address of the addressee from the document (NOT the company sending the document).
-2. Compare it to the user's claimed address.
-3. Be lenient with formatting differences: word order (e.g. "Flat A, 5/F" vs "5/F Flat A"), abbreviations, bilingual rendering, punctuation, or spelling variants. They should be treated as a match if they clearly refer to the same location.
-4. A mismatch means a different street, building, unit, city, or country — NOT just formatting differences.
-
-Respond with ONLY a JSON object (no markdown, no prose) in this exact shape:
-{"match": boolean, "extracted_address": "<address found in document>", "reason": "<one short sentence explaining the decision>"}`,
-  });
-
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await getClient().chat.completions.create({
+    model,
     max_tokens: 500,
-    messages: [{ role: 'user', content: userContent }],
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Extracted text from the address proof document:\n"""\n${truncated}\n"""\n\nUser-claimed address:\n"""\n${userAddress}\n"""`,
+      },
+    ],
   });
 
-  const textBlock = response.content.find((b) => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
-    throw new Error('Claude returned no text content');
-  }
+  return parseResult(response.choices[0]?.message?.content || '');
+}
 
-  const raw = textBlock.text.trim();
-  // Tolerate ```json fences
-  const jsonStr = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '');
+function parseResult(raw: string): AddressVerifyResult {
+  if (!raw) throw new Error('Model returned empty response');
+  const stripped = raw.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/, '');
+  // Some models still wrap or prose around JSON — try to extract the first JSON object
+  const firstBrace = stripped.indexOf('{');
+  const lastBrace = stripped.lastIndexOf('}');
+  const jsonStr = firstBrace >= 0 && lastBrace > firstBrace
+    ? stripped.slice(firstBrace, lastBrace + 1)
+    : stripped;
   const parsed = JSON.parse(jsonStr);
-
   return {
     match: !!parsed.match,
     extracted_address: String(parsed.extracted_address || ''),

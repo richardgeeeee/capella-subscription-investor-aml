@@ -461,6 +461,11 @@ export function InvestorForm({
                   {addressVerification.status === 'failed' && (
                     <p className="text-xs">地址核对服务暂时不可用 / Address verification is temporarily unavailable.</p>
                   )}
+                  {addressVerification.status === 'skipped' && (
+                    <p className="text-xs">
+                      {addressVerification.reason || '地址核对已跳过 / Verification skipped.'}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

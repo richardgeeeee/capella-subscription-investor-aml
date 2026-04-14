@@ -4,10 +4,18 @@ import { getSessionFromCookie } from '@/lib/session';
 import { getLatestAddressProofFile, updateAddressVerification, type AddressVerification } from '@/db';
 import { verifyAddressAgainstDocument } from '@/lib/address-verify';
 
+function isConfigured(): boolean {
+  return !!(process.env.LLM_API_KEY && process.env.LLM_BASE_URL);
+}
+
 export async function POST(request: Request) {
   const session = await getSessionFromCookie();
   if (!session) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  if (!isConfigured()) {
+    return NextResponse.json({ skipped: true, reason: 'Address verification is not configured' });
   }
 
   const body = await request.json();
@@ -47,7 +55,7 @@ export async function POST(request: Request) {
   try {
     const verifyResult = await verifyAddressAgainstDocument(file.stored_path, file.mime_type, address);
     const verification: AddressVerification = {
-      status: verifyResult.match ? 'matched' : 'mismatched',
+      status: verifyResult.skipped ? 'skipped' : verifyResult.match ? 'matched' : 'mismatched',
       user_address: address,
       extracted_address: verifyResult.extracted_address,
       reason: verifyResult.reason,
