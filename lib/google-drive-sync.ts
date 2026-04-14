@@ -14,10 +14,13 @@ import { formatDriveFolderName, formatDisplayName } from '@/lib/file-naming';
 const GAS_WEB_APP_URL = process.env.GAS_WEB_APP_URL;
 const GAS_API_KEY = process.env.GAS_API_KEY;
 
+export function isDriveSyncConfigured(): boolean {
+  return !!(GAS_WEB_APP_URL && GAS_API_KEY);
+}
+
 export async function syncSubmissionToGoogleDrive(submissionId: string): Promise<void> {
   if (!GAS_WEB_APP_URL || !GAS_API_KEY) {
-    console.log('[Google Drive Sync] GAS_WEB_APP_URL or GAS_API_KEY not configured, skipping sync');
-    return;
+    throw new Error('GAS_WEB_APP_URL or GAS_API_KEY is not configured. Deploy the Google Apps Script first.');
   }
 
   const submission = getSubmissionById(submissionId);

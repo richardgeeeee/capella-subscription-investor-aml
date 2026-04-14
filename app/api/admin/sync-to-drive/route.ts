@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/admin-auth';
 import { getLinkById, getSubmissionsByLinkId } from '@/db';
-import { syncSubmissionToGoogleDrive } from '@/lib/google-drive-sync';
+import { syncSubmissionToGoogleDrive, isDriveSyncConfigured } from '@/lib/google-drive-sync';
 
 export async function POST(request: Request) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!isDriveSyncConfigured()) {
+    return NextResponse.json({
+      error: 'Google Drive sync is not configured. Set GAS_WEB_APP_URL and GAS_API_KEY in Railway after deploying the Apps Script.',
+    }, { status: 500 });
   }
 
   const body = await request.json();
