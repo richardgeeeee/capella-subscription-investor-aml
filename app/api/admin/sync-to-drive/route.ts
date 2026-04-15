@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { linkId } = body;
+  const { linkId, force } = body;
 
   if (!linkId) {
     return NextResponse.json({ error: 'linkId is required' }, { status: 400 });
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await syncSubmissionToGoogleDrive(submission.id);
+    await syncSubmissionToGoogleDrive(submission.id, { force: !!force });
     return NextResponse.json({ success: true, submissionId: submission.id });
   } catch (err) {
     console.error('Failed to sync to Drive:', err);

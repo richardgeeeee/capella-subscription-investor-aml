@@ -61,6 +61,8 @@ interface DraftFile {
   mtime: string;
 }
 
+const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
+
 export default function LinkDetailPage({ params }: { params: Promise<{ linkId: string }> }) {
   const { linkId } = use(params);
   const [link, setLink] = useState<LinkDetail | null>(null);
@@ -73,6 +75,15 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [generatingDrafts, setGeneratingDrafts] = useState(false);
   const [draftResult, setDraftResult] = useState<string | null>(null);
+
+  // Inline edit state
+  const [editing, setEditing] = useState(false);
+  const [editSeq, setEditSeq] = useState('');
+  const [editFirst, setEditFirst] = useState('');
+  const [editLast, setEditLast] = useState('');
+  const [editShareClass, setEditShareClass] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -101,23 +112,64 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleSyncToDrive = async () => {
+  const handleSyncToDrive = async (force = false) => {
     setSyncing(true);
     setSyncResult(null);
     try {
       const res = await fetch('/api/admin/sync-to-drive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId }),
+        body: JSON.stringify({ linkId, force }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSyncResult('Successfully synced to Google Drive');
+      setSyncResult(force ? 'Force re-sync complete' : 'Successfully synced to Google Drive');
       fetchData();
     } catch (err) {
       setSyncResult(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const startEditing = () => {
+    if (!link) return;
+    setEditSeq(link.sequence_number ? String(link.sequence_number) : '');
+    setEditFirst(link.first_name || '');
+    setEditLast(link.last_name || '');
+    setEditShareClass(link.share_class || '');
+    setSaveError(null);
+    setEditing(true);
+  };
+
+  const handleSaveLink = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const seq = editSeq ? parseInt(editSeq, 10) : undefined;
+      if (editSeq && (isNaN(seq!) || seq! <= 0)) {
+        setSaveError('Sequence must be a positive integer');
+        setSaving(false);
+        return;
+      }
+      const res = await fetch(`/api/admin/links/${linkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: editFirst,
+          lastName: editLast,
+          sequenceNumber: seq,
+          shareClass: editShareClass || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEditing(false);
+      fetchData();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -180,39 +232,119 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Investor metadata + actions */}
         <div className="bg-white rounded-lg shadow p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-            <div>
-              <p className="text-xs text-gray-500">Sequence</p>
-              <p className="font-medium text-gray-900">
-                {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
-              </p>
+          {editing ? (
+            <div className="space-y-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Sequence #</label>
+                  <input
+                    type="number"
+                    value={editSeq}
+                    onChange={e => setEditSeq(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    placeholder="e.g. 53"
+                    min={1}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">First Name</label>
+                  <input
+                    type="text"
+                    value={editFirst}
+                    onChange={e => setEditFirst(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    placeholder="e.g. Jin"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    value={editLast}
+                    onChange={e => setEditLast(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    placeholder="e.g. ZHANG"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Share Class</label>
+                  <select
+                    value={editShareClass}
+                    onChange={e => setEditShareClass(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                  >
+                    <option value="">— None —</option>
+                    {SHARE_CLASSES.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+                  </select>
+                </div>
+              </div>
+              {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveLink}
+                  disabled={saving}
+                  className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="text-gray-600 px-3 py-1.5 rounded text-sm border hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">First / Last Name</p>
-              <p className="font-medium text-gray-900">
-                {link.first_name || '?'} / {link.last_name || '?'}
-              </p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-500">Sequence</p>
+                <p className="font-medium text-gray-900">
+                  {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">First / Last Name</p>
+                <p className="font-medium text-gray-900">
+                  {link.first_name || '?'} / {link.last_name || '?'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Share Class</p>
+                <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Drive Folder</p>
+                <p className="font-medium text-gray-900 text-xs">
+                  {link.sequence_number && link.first_name && link.last_name
+                    ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
+                    : '-'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Share Class</p>
-              <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Drive Folder</p>
-              <p className="font-medium text-gray-900 text-xs">
-                {link.sequence_number && link.first_name && link.last_name
-                  ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
-                  : '-'}
-              </p>
-            </div>
-          </div>
+          )}
           <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
+            {!editing && (
+              <button
+                onClick={startEditing}
+                className="text-gray-600 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Edit Details
+              </button>
+            )}
             <button
-              onClick={handleSyncToDrive}
+              onClick={() => handleSyncToDrive(false)}
               disabled={syncing || !latestSubmission}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
             >
-              {syncing ? 'Syncing...' : 'Sync to Google Drive'}
+              {syncing ? 'Syncing...' : 'Sync to Drive'}
+            </button>
+            <button
+              onClick={() => handleSyncToDrive(true)}
+              disabled={syncing || !latestSubmission}
+              className="border border-blue-600 text-blue-600 px-4 py-2 rounded-lg text-sm hover:bg-blue-50 disabled:opacity-50"
+            >
+              {syncing ? 'Syncing...' : 'Force Re-sync'}
             </button>
             <button
               onClick={handleGenerateDrafts}

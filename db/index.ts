@@ -456,6 +456,43 @@ export function updateFileSyncStatus(id: string, status: string, driveFileId?: s
   `).run(status, driveFileId || null, id);
 }
 
+export function resetFileSyncStatusForLink(linkId: string) {
+  const db = getDb();
+  return db.prepare(`UPDATE uploaded_files SET drive_sync_status = 'pending', drive_file_id = NULL WHERE link_id = ?`).run(linkId);
+}
+
+export function updateLink(id: string, params: {
+  firstName?: string;
+  lastName?: string;
+  sequenceNumber?: number;
+  shareClass?: string | null;
+}) {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (params.firstName !== undefined) { sets.push('first_name = ?'); values.push(params.firstName || null); }
+  if (params.lastName !== undefined) { sets.push('last_name = ?'); values.push(params.lastName || null); }
+  if (params.sequenceNumber !== undefined) { sets.push('sequence_number = ?'); values.push(params.sequenceNumber); }
+  if (params.shareClass !== undefined) { sets.push('share_class = ?'); values.push(params.shareClass || null); }
+
+  if (sets.length === 0) return;
+
+  // Also update investor_name if either name field is provided
+  if (params.firstName !== undefined || params.lastName !== undefined) {
+    const current = db.prepare('SELECT first_name, last_name FROM links WHERE id = ?').get(id) as { first_name: string | null; last_name: string | null };
+    const fn = params.firstName ?? current?.first_name ?? '';
+    const ln = params.lastName ?? current?.last_name ?? '';
+    if (fn || ln) {
+      sets.push('investor_name = ?');
+      values.push(`${fn} ${ln}`.trim());
+    }
+  }
+
+  values.push(id);
+  return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
 // ---- Admin helpers ----
 
 export function getAdminByUsername(username: string) {

@@ -6,6 +6,7 @@ import {
   getLinkById,
   updateSubmissionSyncStatus,
   updateFileSyncStatus,
+  resetFileSyncStatusForLink,
   getSubmissionVersions,
   type LinkRow,
 } from '@/db';
@@ -18,7 +19,18 @@ export function isDriveSyncConfigured(): boolean {
   return !!(GAS_WEB_APP_URL && GAS_API_KEY);
 }
 
-export async function syncSubmissionToGoogleDrive(submissionId: string): Promise<void> {
+function formDataToCsv(formDataJson: string): string {
+  try {
+    const data = JSON.parse(formDataJson) as Record<string, string>;
+    const escape = (s: string) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Field', 'Value'], ...Object.entries(data).map(([k, v]) => [k, v ?? ''])];
+    return rows.map(row => row.map(escape).join(',')).join('\r\n');
+  } catch {
+    return formDataJson;
+  }
+}
+
+export async function syncSubmissionToGoogleDrive(submissionId: string, options?: { force?: boolean }): Promise<void> {
   if (!GAS_WEB_APP_URL || !GAS_API_KEY) {
     throw new Error('GAS_WEB_APP_URL or GAS_API_KEY is not configured. Deploy the Google Apps Script first.');
   }
@@ -35,18 +47,24 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
     return;
   }
 
+  // Force re-sync: reset all file statuses so they get re-uploaded
+  if (options?.force) {
+    resetFileSyncStatusForLink(link.id);
+  }
+
   updateSubmissionSyncStatus(submissionId, 'syncing');
   const folderName = formatDriveFolderName(link.first_name, link.last_name, link.investor_name, link.sequence_number);
 
   try {
-    // 1. Sync form data as JSON snapshot of the latest version
+    // 1. Sync form data as CSV snapshot of the latest version
     const versions = getSubmissionVersions(submissionId);
     const latestVersion = versions[0];
     const formDataJson = latestVersion?.form_data || submission.form_data;
     const versionLabel = latestVersion ? `_v${latestVersion.version_number}` : '';
-    const formFileName = `${folderName}-Form Data${versionLabel}.json`;
-    const formBlob = new Blob([formDataJson], { type: 'application/json' });
-    const formFile = new File([formBlob], formFileName, { type: 'application/json' });
+    const formFileName = `${folderName}-Form Data${versionLabel}.csv`;
+    const csvContent = formDataToCsv(formDataJson);
+    const formBlob = new Blob([csvContent], { type: 'text/csv' });
+    const formFile = new File([formBlob], formFileName, { type: 'text/csv' });
 
     await uploadFileToGAS({
       folderName,
@@ -55,10 +73,10 @@ export async function syncSubmissionToGoogleDrive(submissionId: string): Promise
       file: formFile,
     });
 
-    // 2. Sync uploaded files (skip already synced)
+    // 2. Sync uploaded files (skip already synced unless force)
     const files = getFilesByLinkId(link.id);
     for (const fileRecord of files) {
-      if (fileRecord.drive_sync_status === 'synced') continue;
+      if (!options?.force && fileRecord.drive_sync_status === 'synced') continue;
 
       try {
         updateFileSyncStatus(fileRecord.id, 'syncing');
