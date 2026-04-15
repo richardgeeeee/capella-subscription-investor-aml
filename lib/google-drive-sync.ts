@@ -19,11 +19,22 @@ export function isDriveSyncConfigured(): boolean {
   return !!(GAS_WEB_APP_URL && GAS_API_KEY);
 }
 
+/** Converts camelCase keys like "investorName" → "Investor_Name". */
+function formatFieldName(key: string): string {
+  return key
+    .replace(/([A-Z])/g, '_$1')
+    .replace(/^_/, '')
+    .split('_')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('_');
+}
+
 function formDataToCsv(formDataJson: string): string {
   try {
     const data = JSON.parse(formDataJson) as Record<string, string>;
     const escape = (s: string) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Field', 'Value'], ...Object.entries(data).map(([k, v]) => [k, v ?? ''])];
+    const rows = [['Field', 'Value'], ...Object.entries(data).map(([k, v]) => [formatFieldName(k), v ?? ''])];
     return rows.map(row => row.map(escape).join(',')).join('\r\n');
   } catch {
     return formDataJson;

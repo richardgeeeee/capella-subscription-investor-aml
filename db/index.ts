@@ -466,6 +466,7 @@ export function updateLink(id: string, params: {
   lastName?: string;
   sequenceNumber?: number;
   shareClass?: string | null;
+  investorEmail?: string | null;
 }) {
   const db = getDb();
   const sets: string[] = [];
@@ -475,6 +476,10 @@ export function updateLink(id: string, params: {
   if (params.lastName !== undefined) { sets.push('last_name = ?'); values.push(params.lastName || null); }
   if (params.sequenceNumber !== undefined) { sets.push('sequence_number = ?'); values.push(params.sequenceNumber); }
   if (params.shareClass !== undefined) { sets.push('share_class = ?'); values.push(params.shareClass || null); }
+  if (params.investorEmail !== undefined) {
+    sets.push('investor_email = ?');
+    values.push(params.investorEmail ? params.investorEmail.toLowerCase() : null);
+  }
 
   if (sets.length === 0) return;
 

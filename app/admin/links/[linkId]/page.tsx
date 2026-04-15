@@ -45,7 +45,9 @@ interface FileData {
 
 interface LinkDetail {
   id: string;
+  token: string;
   investor_name: string;
+  investor_email: string | null;
   first_name: string | null;
   last_name: string | null;
   share_class: string | null;
@@ -62,6 +64,17 @@ interface DraftFile {
 }
 
 const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
+
+/** Converts camelCase keys like "investorName" → "Investor_Name". */
+function formatFieldName(key: string): string {
+  return key
+    .replace(/([A-Z])/g, '_$1')
+    .replace(/^_/, '')
+    .split('_')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('_');
+}
 
 export default function LinkDetailPage({ params }: { params: Promise<{ linkId: string }> }) {
   const { linkId } = use(params);
@@ -82,8 +95,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [editFirst, setEditFirst] = useState('');
   const [editLast, setEditLast] = useState('');
   const [editShareClass, setEditShareClass] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Copy / resend state
+  const [copied, setCopied] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendResult, setResendResult] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -138,6 +157,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     setEditFirst(link.first_name || '');
     setEditLast(link.last_name || '');
     setEditShareClass(link.share_class || '');
+    setEditEmail(link.investor_email || '');
     setSaveError(null);
     setEditing(true);
   };
@@ -160,6 +180,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           lastName: editLast,
           sequenceNumber: seq,
           shareClass: editShareClass || null,
+          investorEmail: editEmail || null,
         }),
       });
       const data = await res.json();
@@ -170,6 +191,38 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url).catch(() => {
+      const textarea = document.createElement('textarea');
+      textarea.value = url;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleResendInvitation = async () => {
+    setResending(true);
+    setResendResult(null);
+    try {
+      const res = await fetch('/api/admin/send-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setResendResult('Invitation email sent');
+    } catch (err) {
+      setResendResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setResending(false);
     }
   };
 
@@ -277,6 +330,16 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     {SHARE_CLASSES.map(sc => <option key={sc} value={sc}>{sc}</option>)}
                   </select>
                 </div>
+                <div className="col-span-2 md:col-span-4">
+                  <label className="text-xs text-gray-500 block mb-1">Investor Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={e => setEditEmail(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    placeholder="investor@example.com"
+                  />
+                </div>
               </div>
               {saveError && <p className="text-xs text-red-600">{saveError}</p>}
               <div className="flex gap-2">
@@ -296,32 +359,63 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-              <div>
-                <p className="text-xs text-gray-500">Sequence</p>
-                <p className="font-medium text-gray-900">
-                  {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
-                </p>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500">Sequence</p>
+                  <p className="font-medium text-gray-900">
+                    {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">First / Last Name</p>
+                  <p className="font-medium text-gray-900">
+                    {link.first_name || '?'} / {link.last_name || '?'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Share Class</p>
+                  <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Drive Folder</p>
+                  <p className="font-medium text-gray-900 text-xs">
+                    {link.sequence_number && link.first_name && link.last_name
+                      ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
+                      : '-'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">First / Last Name</p>
-                <p className="font-medium text-gray-900">
-                  {link.first_name || '?'} / {link.last_name || '?'}
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Investor Email</p>
+                  <p className="font-medium text-gray-900 break-all">{link.investor_email || <span className="text-gray-400">(none)</span>}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Unique Submission Link</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-gray-50 border rounded px-2 py-1 text-xs text-gray-700 break-all">
+                      {typeof window !== 'undefined' ? `${window.location.origin}/submit/${link.token}` : `/submit/${link.token}`}
+                    </code>
+                    <button
+                      onClick={() => handleCopy(`${window.location.origin}/submit/${link.token}`)}
+                      className={`p-2 rounded-lg border transition-colors ${copied ? 'bg-green-100 border-green-300 text-green-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+                      title={copied ? 'Copied!' : 'Copy to clipboard'}
+                    >
+                      {copied ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">Share Class</p>
-                <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Drive Folder</p>
-                <p className="font-medium text-gray-900 text-xs">
-                  {link.sequence_number && link.first_name && link.last_name
-                    ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
-                    : '-'}
-                </p>
-              </div>
-            </div>
+            </>
           )}
           <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
             {!editing && (
@@ -332,6 +426,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                 Edit Details
               </button>
             )}
+            <button
+              onClick={handleResendInvitation}
+              disabled={resending || !link.investor_email}
+              className="border border-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+              title={!link.investor_email ? 'Add an investor email first' : 'Resend invitation email'}
+            >
+              {resending ? 'Sending...' : 'Resend Invitation'}
+            </button>
             <button
               onClick={() => handleSyncToDrive(false)}
               disabled={syncing || !latestSubmission}
@@ -354,6 +456,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               {generatingDrafts ? 'Generating...' : 'Generate Draft Agreements'}
             </button>
           </div>
+          {resendResult && <p className="mt-2 text-xs text-gray-600">{resendResult}</p>}
           {syncResult && <p className="mt-2 text-xs text-gray-600">{syncResult}</p>}
           {draftResult && <p className="mt-2 text-xs text-gray-600">{draftResult}</p>}
         </div>
@@ -434,7 +537,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.entries(currentFormData).map(([key, value]) => (
                 <div key={key} className="border-b pb-2">
-                  <p className="text-xs text-gray-500">{key}</p>
+                  <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
                   <p className="text-sm text-gray-900">{value || '-'}</p>
                 </div>
               ))}
@@ -489,7 +592,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white p-3 rounded border">
                             {Object.entries(version.form_data).map(([key, value]) => (
                               <div key={key} className="border-b pb-1 last:border-b-0">
-                                <p className="text-xs text-gray-500">{key}</p>
+                                <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
                                 <p className="text-sm text-gray-900">{value || '-'}</p>
                               </div>
                             ))}
