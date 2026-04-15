@@ -30,11 +30,45 @@ function formatFieldName(key: string): string {
     .join('_');
 }
 
+interface EmploymentEntryCsv {
+  employerName?: string;
+  natureOfBusiness?: string;
+  startYear?: string;
+  startMonth?: string;
+  endYear?: string;
+  endMonth?: string;
+}
+
 function formDataToCsv(formDataJson: string): string {
   try {
     const data = JSON.parse(formDataJson) as Record<string, string>;
     const escape = (s: string) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Field', 'Value'], ...Object.entries(data).map(([k, v]) => [formatFieldName(k), v ?? ''])];
+    const rows: string[][] = [['Field', 'Value']];
+
+    for (const [k, v] of Object.entries(data)) {
+      if (k === 'employmentHistory' && v) {
+        // Try to parse and flatten into multiple rows
+        try {
+          const entries = JSON.parse(v) as EmploymentEntryCsv[];
+          if (Array.isArray(entries) && entries.length > 0) {
+            entries.forEach((entry, idx) => {
+              const n = idx + 1;
+              rows.push([`Employment_${n}_Employer_Name`, entry.employerName ?? '']);
+              rows.push([`Employment_${n}_Nature_Of_Business`, entry.natureOfBusiness ?? '']);
+              const start = entry.startYear && entry.startMonth ? `${entry.startYear}-${entry.startMonth}` : (entry.startYear ?? '');
+              const end = entry.endYear && entry.endMonth ? `${entry.endYear}-${entry.endMonth}` : (entry.endYear ?? 'Present');
+              rows.push([`Employment_${n}_Start`, start]);
+              rows.push([`Employment_${n}_End`, end]);
+            });
+            continue;
+          }
+        } catch {
+          // fall through
+        }
+      }
+      rows.push([formatFieldName(k), v ?? '']);
+    }
+
     return rows.map(row => row.map(escape).join(',')).join('\r\n');
   } catch {
     return formDataJson;

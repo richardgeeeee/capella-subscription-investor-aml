@@ -76,6 +76,36 @@ function formatFieldName(key: string): string {
     .join('_');
 }
 
+interface EmploymentEntry {
+  employerName?: string;
+  natureOfBusiness?: string;
+  startYear?: string;
+  startMonth?: string;
+  endYear?: string;
+  endMonth?: string;
+}
+
+function parseEmploymentHistory(raw: string): EmploymentEntry[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as EmploymentEntry[];
+  } catch {
+    // not JSON
+  }
+  return null;
+}
+
+function formatPeriod(entry: EmploymentEntry): string {
+  const start = entry.startYear && entry.startMonth
+    ? `${entry.startYear}-${entry.startMonth}`
+    : entry.startYear || '?';
+  const end = entry.endYear && entry.endMonth
+    ? `${entry.endYear}-${entry.endMonth}`
+    : entry.endYear || 'Present';
+  return `${start} – ${end}`;
+}
+
 export default function LinkDetailPage({ params }: { params: Promise<{ linkId: string }> }) {
   const { linkId } = use(params);
   const [link, setLink] = useState<LinkDetail | null>(null);
@@ -535,12 +565,37 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             </div>
             <p className="text-xs text-gray-500 mb-3">Last updated: {new Date(latestSubmission.updated_at).toLocaleString()}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.entries(currentFormData).map(([key, value]) => (
-                <div key={key} className="border-b pb-2">
-                  <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
-                  <p className="text-sm text-gray-900">{value || '-'}</p>
-                </div>
-              ))}
+              {Object.entries(currentFormData).map(([key, value]) => {
+                if (key === 'employmentHistory') {
+                  const entries = parseEmploymentHistory(value);
+                  return (
+                    <div key={key} className="md:col-span-2 border-b pb-2">
+                      <p className="text-xs text-gray-500 mb-2">{formatFieldName(key)}</p>
+                      {entries && entries.length > 0 ? (
+                        <div className="space-y-2">
+                          {entries.map((entry, idx) => (
+                            <div key={idx} className="bg-gray-50 border rounded p-2 text-sm">
+                              <p className="font-medium text-gray-900">
+                                {idx + 1}. {entry.employerName || '?'}
+                                {entry.natureOfBusiness && <span className="text-gray-600 font-normal"> — {entry.natureOfBusiness}</span>}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">{formatPeriod(entry)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-900">{value || '-'}</p>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={key} className="border-b pb-2">
+                    <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
+                    <p className="text-sm text-gray-900">{value || '-'}</p>
+                  </div>
+                );
+              })}
             </div>
             {latestSubmission.status === 'finalized' && (
               <div className="mt-4 pt-4 border-t">
@@ -590,12 +645,35 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                         <div>
                           <h3 className="text-xs font-medium text-gray-700 mb-2">Form Data</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-white p-3 rounded border">
-                            {Object.entries(version.form_data).map(([key, value]) => (
-                              <div key={key} className="border-b pb-1 last:border-b-0">
-                                <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
-                                <p className="text-sm text-gray-900">{value || '-'}</p>
-                              </div>
-                            ))}
+                            {Object.entries(version.form_data).map(([key, value]) => {
+                              if (key === 'employmentHistory') {
+                                const entries = parseEmploymentHistory(value);
+                                return (
+                                  <div key={key} className="md:col-span-2 border-b pb-1 last:border-b-0">
+                                    <p className="text-xs text-gray-500 mb-1">{formatFieldName(key)}</p>
+                                    {entries && entries.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {entries.map((entry, idx) => (
+                                          <div key={idx} className="text-xs text-gray-800">
+                                            {idx + 1}. {entry.employerName || '?'}
+                                            {entry.natureOfBusiness && ` — ${entry.natureOfBusiness}`}
+                                            <span className="text-gray-500"> ({formatPeriod(entry)})</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-gray-900">{value || '-'}</p>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={key} className="border-b pb-1 last:border-b-0">
+                                  <p className="text-xs text-gray-500">{formatFieldName(key)}</p>
+                                  <p className="text-sm text-gray-900">{value || '-'}</p>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                         {version.files.length > 0 && (

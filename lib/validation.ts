@@ -56,9 +56,7 @@ export const individualFormSchema = subscriptionSchema.merge(paymentSchema).exte
   emailAddress: z.string().email('Invalid email'),
   sourceOfWealth: z.string().min(1, 'Required'),
   sourceOfFunds: z.string().min(1, 'Required'),
-  employerName: z.string().optional().default(''),
-  title: z.string().optional().default(''),
-  employmentPeriod: z.string().optional().default(''),
+  employmentHistory: z.string().optional().default(''),
   purposeOfInvestment: z.string().min(1, 'Required'),
 });
 

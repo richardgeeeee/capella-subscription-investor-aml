@@ -38,6 +38,22 @@ export const labels: Record<string, { en: string; zh: string }> = {
   employmentPeriod: { en: 'Employment Period', zh: '雇佣期' },
   purposeOfInvestment: { en: 'Purpose of Investment', zh: '投资目的（资本增值/资本保值）' },
 
+  // -- Employment History --
+  section_employment_history: { en: 'Employment History', zh: '受雇历史' },
+  natureOfBusinessEmployer: { en: 'Nature of Business', zh: '公司业务性质' },
+  employment_start: { en: 'Start (Year / Month)', zh: '起始（年/月）' },
+  employment_end: { en: 'End (Year / Month)', zh: '终止（年/月）' },
+  employment_present: { en: 'Present', zh: '至今' },
+  employment_present_hint: { en: 'leave empty if current', zh: '当前职位请留空' },
+  add_employment: { en: 'Add Employment', zh: '新增一条受雇记录' },
+  remove_employment: { en: 'Remove', zh: '删除' },
+  year: { en: 'Year', zh: '年' },
+  month: { en: 'Month', zh: '月' },
+  footnote_employment_history: {
+    en: 'List each employer separately. You can add multiple entries for past and current positions.',
+    zh: '请分别填写每一家雇主的信息。您可以添加多条记录，包含过去及现在的受雇经历。',
+  },
+
   // -- Corporate fields --
   dateOfFormation: { en: 'Date of Formation/Incorporation', zh: '成立/注册日期' },
   jurisdiction: { en: 'Jurisdiction of Organization', zh: '组织管辖地' },

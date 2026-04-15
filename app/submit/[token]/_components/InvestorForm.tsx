@@ -8,6 +8,7 @@ import { LanguageToggle } from './LanguageToggle';
 import { FormField } from './FormField';
 import { MonthEndDateField } from './MonthEndDateField';
 import { FileDropzone } from './FileDropzone';
+import { EmploymentHistorySection } from './EmploymentHistorySection';
 
 interface InvestorFormProps {
   token: string;
@@ -23,7 +24,7 @@ interface InvestorFormProps {
 
 interface FieldDef {
   key: string;
-  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end';
+  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end' | 'employment_history';
   readOnly?: boolean;
   required?: boolean;
   footnoteKey?: string;
@@ -53,9 +54,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'emailAddress', type: 'email', required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds' },
-    { key: 'employerName' },
-    { key: 'title' },
-    { key: 'employmentPeriod' },
+    { key: 'employmentHistory', type: 'employment_history' },
     { key: 'purposeOfInvestment', required: true, footnoteKey: 'footnote_purpose_of_investment' },
   ]},
   { section: 'section_payment', fields: [
@@ -379,6 +378,16 @@ export function InvestorForm({
                     onChange={(value) => handleFieldChange(field.key, value)}
                     required={field.required}
                     footnoteKey={field.footnoteKey}
+                  />
+                );
+              }
+              if (field.type === 'employment_history') {
+                return (
+                  <EmploymentHistorySection
+                    key={field.key}
+                    lang={lang}
+                    value={formData[field.key] || ''}
+                    onChange={(value) => handleFieldChange(field.key, value)}
                   />
                 );
               }
