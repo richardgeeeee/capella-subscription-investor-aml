@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { validateToken } from '@/lib/token';
 import { verifyCodeAndCreateSession, setSessionCookie } from '@/lib/session';
+import { logLinkEvent, getLinkEvents } from '@/db';
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -21,6 +22,13 @@ export async function POST(request: Request) {
   }
 
   await setSessionCookie(sessionToken);
+
+  // Log only the first successful login per link to avoid log spam.
+  const linkId = result.link!.id;
+  const hasFirstLogin = getLinkEvents(linkId).some(e => e.event_type === 'investor_first_login');
+  if (!hasFirstLogin) {
+    logLinkEvent(linkId, 'investor_first_login', { email });
+  }
 
   return NextResponse.json({ success: true });
 }

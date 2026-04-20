@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink, deleteLink } from '@/db';
+import { getLinkById, updateLink, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -41,6 +41,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
     shareClass: shareClass !== undefined ? shareClass : undefined,
     investorEmail: investorEmail !== undefined ? investorEmail : undefined,
   });
+
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  if (firstName !== undefined && firstName !== link.first_name) changes.firstName = { from: link.first_name, to: firstName };
+  if (lastName !== undefined && lastName !== link.last_name) changes.lastName = { from: link.last_name, to: lastName };
+  if (sequenceNumber !== undefined && sequenceNumber !== link.sequence_number) changes.sequenceNumber = { from: link.sequence_number, to: sequenceNumber };
+  if (shareClass !== undefined && shareClass !== link.share_class) changes.shareClass = { from: link.share_class, to: shareClass };
+  if (investorEmail !== undefined && (investorEmail || null) !== link.investor_email) changes.investorEmail = { from: link.investor_email, to: investorEmail };
+  if (Object.keys(changes).length > 0) {
+    logLinkEvent(linkId, 'admin_edit', { changes });
+  }
 
   return NextResponse.json({ success: true, link: getLinkById(linkId) });
 }

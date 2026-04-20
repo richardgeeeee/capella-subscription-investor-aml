@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession } from '@/lib/admin-auth';
-import { getLinkById, getSubmissionsByLinkId, getTemplatesByLinkAndKind, type ContractTemplateRow } from '@/db';
+import { getLinkById, getSubmissionsByLinkId, getTemplatesByLinkAndKind, logLinkEvent, type ContractTemplateRow } from '@/db';
 import { generateContract } from '@/lib/contract';
 import { formatAgreementName } from '@/lib/file-naming';
 
@@ -78,6 +78,11 @@ export async function POST(request: Request) {
       errors.push({ kind, error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  logLinkEvent(linkId, 'drafts_generated', {
+    generated: generated.map(g => g.fileName),
+    errors: errors.length > 0 ? errors : undefined,
+  });
 
   return NextResponse.json({ success: true, generated, errors });
 }

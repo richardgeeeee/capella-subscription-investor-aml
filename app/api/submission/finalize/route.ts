@@ -6,6 +6,7 @@ import {
   finalizeSubmission,
   getFilesByLinkId,
   createSubmissionVersion,
+  logLinkEvent,
 } from '@/db';
 import { individualFormSchema, corporateFormSchema, amountQualifiesForAssetProofWaiver } from '@/lib/validation';
 import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES } from '@/lib/constants';
@@ -91,6 +92,13 @@ export async function POST(request: Request) {
 
   // Mark as finalized (but still editable — investors can submit additional versions)
   finalizeSubmission(submission.id);
+
+  logLinkEvent(result.link!.id, 'submission_finalized', {
+    submissionId: submission.id,
+    versionNumber,
+    fileCount: files.length,
+    email: session.email,
+  });
 
   // Trigger async Google Drive sync
   syncSubmissionToGoogleDrive(submission.id).catch(err => {

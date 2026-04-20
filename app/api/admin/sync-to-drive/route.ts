@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/admin-auth';
-import { getLinkById, getSubmissionsByLinkId } from '@/db';
+import { getLinkById, getSubmissionsByLinkId, logLinkEvent } from '@/db';
 import { syncSubmissionToGoogleDrive, isDriveSyncConfigured } from '@/lib/google-drive-sync';
 
 export async function POST(request: Request) {
@@ -36,9 +36,11 @@ export async function POST(request: Request) {
 
   try {
     await syncSubmissionToGoogleDrive(submission.id, { force: !!force });
+    logLinkEvent(linkId, 'drive_sync_success', { submissionId: submission.id, force: !!force });
     return NextResponse.json({ success: true, submissionId: submission.id });
   } catch (err) {
     console.error('Failed to sync to Drive:', err);
+    logLinkEvent(linkId, 'drive_sync_failed', { submissionId: submission.id, force: !!force, error: String(err) });
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

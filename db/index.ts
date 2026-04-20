@@ -114,6 +114,14 @@ CREATE TABLE IF NOT EXISTS email_templates (
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_links_investor_email ON links(investor_email);
+CREATE TABLE IF NOT EXISTS link_events (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    event_type      TEXT NOT NULL,
+    details         TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_link_events_link_id ON link_events(link_id);
 `;
 
 export function getDb(): Database.Database {
@@ -302,6 +310,23 @@ export function deleteLink(id: string): string[] {
   tx();
 
   return filePaths;
+}
+
+// ---- Link event helpers ----
+
+export function logLinkEvent(linkId: string, eventType: string, details?: Record<string, unknown>) {
+  try {
+    const db = getDb();
+    db.prepare(`INSERT INTO link_events (id, link_id, event_type, details) VALUES (?, ?, ?, ?)`)
+      .run(crypto.randomUUID(), linkId, eventType, details ? JSON.stringify(details) : null);
+  } catch (err) {
+    console.error(`[logLinkEvent] failed to log ${eventType} for ${linkId}:`, err);
+  }
+}
+
+export function getLinkEvents(linkId: string) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM link_events WHERE link_id = ? ORDER BY created_at DESC').all(linkId) as LinkEventRow[];
 }
 
 // ---- Session helpers ----
@@ -666,6 +691,14 @@ export interface LinkRow {
   expires_at: string;
   created_at: string;
   is_revoked: number;
+}
+
+export interface LinkEventRow {
+  id: string;
+  link_id: string;
+  event_type: string;
+  details: string | null;
+  created_at: string;
 }
 
 export interface SessionRow {

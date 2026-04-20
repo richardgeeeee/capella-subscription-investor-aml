@@ -63,6 +63,62 @@ interface DraftFile {
   mtime: string;
 }
 
+interface TimelineEvent {
+  at: string;
+  type: string;
+  details: Record<string, unknown>;
+}
+
+const EVENT_META: Record<string, { label: string; color: string; icon: string }> = {
+  link_created:         { label: 'Link created',              color: 'bg-gray-100 text-gray-700',       icon: '📝' },
+  admin_edit:           { label: 'Admin edited details',      color: 'bg-yellow-100 text-yellow-800',   icon: '✏️' },
+  invitation_sent:      { label: 'Invitation email sent',     color: 'bg-blue-100 text-blue-700',       icon: '✉️' },
+  invitation_failed:    { label: 'Invitation email failed',   color: 'bg-red-100 text-red-700',         icon: '⚠️' },
+  investor_first_login: { label: 'Investor first login',      color: 'bg-indigo-100 text-indigo-700',   icon: '🔑' },
+  file_uploaded:        { label: 'File uploaded',             color: 'bg-sky-100 text-sky-700',         icon: '📎' },
+  submission_version:   { label: 'Submission finalized',      color: 'bg-green-100 text-green-700',     icon: '✅' },
+  drive_sync_success:   { label: 'Synced to Drive',           color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
+  drive_sync_failed:    { label: 'Drive sync failed',         color: 'bg-red-100 text-red-700',         icon: '⚠️' },
+  drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
+};
+
+function renderEventDetail(ev: TimelineEvent): string {
+  const d = ev.details;
+  switch (ev.type) {
+    case 'invitation_sent': return typeof d.email === 'string' ? `to ${d.email}` : '';
+    case 'invitation_failed': return `to ${d.email || '?'} — ${d.error || 'unknown error'}`;
+    case 'investor_first_login': return typeof d.email === 'string' ? d.email : '';
+    case 'file_uploaded': return `${d.name || '?'} (${d.documentType || ''})`;
+    case 'submission_version': return `v${d.versionNumber} · ${d.fileCount} file${d.fileCount === 1 ? '' : 's'}${d.email ? ' · ' + d.email : ''}`;
+    case 'drive_sync_success': return d.force ? 'force re-sync' : '';
+    case 'drive_sync_failed': return String(d.error || 'unknown error');
+    case 'drafts_generated': {
+      const gen = Array.isArray(d.generated) ? (d.generated as string[]) : [];
+      const errs = Array.isArray(d.errors) ? (d.errors as unknown[]) : [];
+      const parts: string[] = [];
+      if (gen.length) parts.push(`${gen.length} file${gen.length === 1 ? '' : 's'}`);
+      if (errs.length) parts.push(`${errs.length} error${errs.length === 1 ? '' : 's'}`);
+      return parts.join(', ');
+    }
+    case 'admin_edit': {
+      const changes = (d.changes as Record<string, { from: unknown; to: unknown }>) || {};
+      return Object.keys(changes).map(k => `${k}: ${formatVal(changes[k].from)} → ${formatVal(changes[k].to)}`).join('; ');
+    }
+    default: return '';
+  }
+}
+
+function formatVal(v: unknown): string {
+  if (v == null || v === '') return '—';
+  return String(v);
+}
+
+/** SQLite stores datetimes as "YYYY-MM-DD HH:MM:SS" in UTC. Make JS parse it as UTC. */
+function parseSqliteTs(s: string): Date {
+  if (s.includes('T')) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
+
 const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
 
 function buildLinkTag(firstName: string | null, lastName: string | null): string {
@@ -119,6 +175,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [submissions, setSubmissions] = useState<SubmissionData[]>([]);
   const [files, setFiles] = useState<FileData[]>([]);
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -156,6 +213,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setLink(data.link);
       setSubmissions(data.submissions);
       setFiles(data.files);
+      setTimeline(data.timeline || []);
       if (draftRes.ok) {
         const draftData = await draftRes.json();
         setDrafts(draftData.files || []);
@@ -524,6 +582,36 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           {resendResult && <p className="mt-2 text-xs text-gray-600">{resendResult}</p>}
           {syncResult && <p className="mt-2 text-xs text-gray-600">{syncResult}</p>}
           {draftResult && <p className="mt-2 text-xs text-gray-600">{draftResult}</p>}
+        </div>
+
+        {/* Activity Log */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+            <span className="text-xs text-gray-500">{timeline.length} event{timeline.length === 1 ? '' : 's'}</span>
+          </div>
+          {timeline.length === 0 ? (
+            <p className="text-sm text-gray-500">No activity yet.</p>
+          ) : (
+            <ol className="relative border-l-2 border-gray-200 ml-2 space-y-3">
+              {timeline.map((ev, i) => {
+                const meta = EVENT_META[ev.type] || { label: ev.type, color: 'bg-gray-100 text-gray-700', icon: '•' };
+                const detail = renderEventDetail(ev);
+                return (
+                  <li key={i} className="ml-4">
+                    <span className="absolute -left-[11px] w-5 h-5 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center text-[10px]">
+                      {meta.icon}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`px-2 py-0.5 text-xs rounded ${meta.color}`}>{meta.label}</span>
+                      <span className="text-xs text-gray-500">{parseSqliteTs(ev.at).toLocaleString()}</span>
+                    </div>
+                    {detail && <p className="text-xs text-gray-600 mt-0.5 break-all">{detail}</p>}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </div>
 
         {/* Address verification warning */}

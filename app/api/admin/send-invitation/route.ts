@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/admin-auth';
-import { getLinkById, getEmailTemplate } from '@/db';
+import { getLinkById, getEmailTemplate, logLinkEvent } from '@/db';
 import { sendInvitationEmail } from '@/lib/email';
 import { formatLinkTag } from '@/lib/file-naming';
 
@@ -43,9 +43,11 @@ export async function POST(request: Request) {
       link.expires_at,
       template
     );
+    logLinkEvent(linkId, 'invitation_sent', { email: link.investor_email });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Failed to send invitation email:', err);
+    logLinkEvent(linkId, 'invitation_failed', { email: link.investor_email, error: String(err) });
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

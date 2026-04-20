@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions } from '@/db';
+import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions, getLinkEvents } from '@/db';
 import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
@@ -50,9 +50,62 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  // Build merged event timeline: link_events table + derived from existing data.
+  interface TimelineEvent {
+    at: string;
+    type: string;
+    details: Record<string, unknown>;
+  }
+
+  const timeline: TimelineEvent[] = [];
+
+  // Derived: link creation
+  timeline.push({ at: link.created_at, type: 'link_created', details: {} });
+
+  // Derived: each submission version (investor submission)
+  for (const s of submissionsWithVersions) {
+    for (const v of s.versions) {
+      timeline.push({
+        at: v.submitted_at,
+        type: 'submission_version',
+        details: {
+          versionNumber: v.version_number,
+          fileCount: v.files.length,
+          email: s.email,
+        },
+      });
+    }
+  }
+
+  // Derived: each file upload
+  for (const f of files) {
+    timeline.push({
+      at: f.uploaded_at,
+      type: 'file_uploaded',
+      details: {
+        documentType: f.document_type,
+        name: f.display_name || f.original_name,
+      },
+    });
+  }
+
+  // Admin/system events from link_events table
+  for (const ev of getLinkEvents(linkId)) {
+    // Skip derived types that overlap with auto-populated ones above.
+    if (ev.event_type === 'submission_finalized') continue;
+    timeline.push({
+      at: ev.created_at,
+      type: ev.event_type,
+      details: ev.details ? JSON.parse(ev.details) : {},
+    });
+  }
+
+  timeline.sort((a, b) => b.at.localeCompare(a.at));
+
   return NextResponse.json({
     link,
     submissions: submissionsWithVersions,
     files,
+    timeline,
   });
 }
