@@ -174,7 +174,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSendForLink = async (linkId: string) => {
+  const handleSendForLink = async (linkId: string, email: string) => {
+    const ok = window.confirm(`Send invitation email to ${email}?`);
+    if (!ok) return;
     setSendingLinkId(linkId);
     try {
       const res = await fetch('/api/admin/send-invitation', {
@@ -227,7 +229,7 @@ export default function AdminDashboard() {
               onClick={() => { setShowForm(!showForm); setCreatedUrl(''); setCopied(false); setEmailSent(false); }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
             >
-              + New Link
+              Link for New Investor
             </button>
             <button
               onClick={async () => {
@@ -416,7 +418,11 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y">
                 {links.map((link) => (
-                  <tr key={link.id} className="hover:bg-gray-50">
+                  <tr
+                    key={link.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => window.location.href = `/admin/links/${link.id}`}
+                  >
                     <td className="px-4 py-3 text-gray-500 text-xs">{link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{link.investor_name}</div>
@@ -428,17 +434,11 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3 text-gray-600">{link.latest_sync_status || '-'}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(link.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(link.expires_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/links/${link.id}`}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          View
-                        </Link>
                         {link.investor_email && (
                           <button
-                            onClick={() => handleSendForLink(link.id)}
+                            onClick={() => handleSendForLink(link.id, link.investor_email!)}
                             disabled={sendingLinkId === link.id || sentLinkIds.has(link.id)}
                             className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
                               sentLinkIds.has(link.id)
