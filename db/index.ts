@@ -212,8 +212,7 @@ export function createLink(params: {
   // pre-existing folders (e.g. legacy manual numbering).
   let sequenceNumber = params.sequenceNumber;
   if (!sequenceNumber || sequenceNumber <= 0) {
-    const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
-    sequenceNumber = maxRow.max + 1;
+    sequenceNumber = suggestNextSequence();
   }
 
   return db.prepare(`
@@ -233,11 +232,23 @@ export function createLink(params: {
   );
 }
 
-/** Returns the suggested next sequence (max + 1) for UI placeholders */
+/**
+ * Returns the smallest positive sequence number not currently used by any link.
+ * Fills gaps left by deleted entries so numbering stays dense.
+ */
 export function suggestNextSequence(): number {
   const db = getDb();
-  const maxRow = db.prepare(`SELECT COALESCE(MAX(sequence_number), 0) as max FROM links`).get() as { max: number };
-  return maxRow.max + 1;
+  const rows = db.prepare(`
+    SELECT sequence_number FROM links
+    WHERE sequence_number IS NOT NULL AND sequence_number > 0
+    ORDER BY sequence_number ASC
+  `).all() as { sequence_number: number }[];
+  let expected = 1;
+  for (const row of rows) {
+    if (row.sequence_number > expected) return expected;
+    if (row.sequence_number === expected) expected++;
+  }
+  return expected;
 }
 
 export function getLinkByToken(token: string) {
@@ -264,6 +275,33 @@ export function getAllLinks() {
 export function revokeLink(id: string) {
   const db = getDb();
   return db.prepare('UPDATE links SET is_revoked = 1 WHERE id = ?').run(id);
+}
+
+/**
+ * Fully removes a link and everything attached to it (submissions, versions,
+ * files, sessions, codes). Returns the disk paths of uploaded files so the
+ * caller can unlink them from storage.
+ */
+export function deleteLink(id: string): string[] {
+  const db = getDb();
+  const filePaths = (db.prepare('SELECT stored_path FROM uploaded_files WHERE link_id = ?').all(id) as { stored_path: string }[])
+    .map(r => r.stored_path);
+  const submissionIds = (db.prepare('SELECT id FROM submissions WHERE link_id = ?').all(id) as { id: string }[])
+    .map(r => r.id);
+
+  const tx = db.transaction(() => {
+    for (const sid of submissionIds) {
+      db.prepare('DELETE FROM submission_versions WHERE submission_id = ?').run(sid);
+    }
+    db.prepare('DELETE FROM uploaded_files WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM sessions WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM verification_codes WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM submissions WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM links WHERE id = ?').run(id);
+  });
+  tx();
+
+  return filePaths;
 }
 
 // ---- Session helpers ----

@@ -50,6 +50,7 @@ export default function AdminDashboard() {
   const [emailSent, setEmailSent] = useState(false);
   const [sendingLinkId, setSendingLinkId] = useState<string | null>(null);
   const [sentLinkIds, setSentLinkIds] = useState<Set<string>>(new Set());
+  const [deletingLinkId, setDeletingLinkId] = useState<string | null>(null);
 
   const fetchLinks = useCallback(async () => {
     try {
@@ -147,6 +148,29 @@ export default function AdminDashboard() {
       alert(err instanceof Error ? err.message : 'Failed to send email');
     } finally {
       setSendingEmail(false);
+    }
+  };
+
+  const handleDelete = async (link: LinkData) => {
+    const label = link.investor_name || link.investor_email || link.id;
+    const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
+    const ok = window.confirm(
+      `Delete ${seq}${label}?\n\nThis permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence number ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingLinkId(link.id);
+    try {
+      const res = await fetch(`/api/admin/links/${link.id}`, { method: 'DELETE' });
+      const data = res.status !== 204 ? await res.json().catch(() => ({})) : {};
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      fetchLinks();
+      fetch('/api/admin/next-sequence').then(r => r.ok ? r.json() : null).then(d => {
+        if (typeof d?.next === 'number') setSuggestedSequence(d.next);
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeletingLinkId(null);
     }
   };
 
@@ -432,6 +456,16 @@ export default function AdminDashboard() {
                             )}
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDelete(link)}
+                          disabled={deletingLinkId === link.id}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-700 transition-colors disabled:opacity-50"
+                          title="Delete this investor entry and all associated data"
+                        >
+                          {deletingLinkId === link.id ? 'Deleting...' : (
+                            <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>Delete</>
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>

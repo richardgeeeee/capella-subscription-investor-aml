@@ -133,6 +133,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [copied, setCopied] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -253,6 +254,25 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setResendResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleDeleteLink = async () => {
+    if (!link) return;
+    const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
+    const ok = window.confirm(
+      `Delete ${seq}${link.investor_name}?\n\nThis permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/links/${linkId}`, { method: 'DELETE' });
+      const data = res.status !== 204 ? await res.json().catch(() => ({})) : {};
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      window.location.href = '/admin';
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete');
+      setDeleting(false);
     }
   };
 
@@ -484,6 +504,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
             >
               {generatingDrafts ? 'Generating...' : 'Generate Draft Agreements'}
+            </button>
+            <button
+              onClick={handleDeleteLink}
+              disabled={deleting}
+              className="ml-auto border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+              title="Delete this investor entry and all associated data"
+            >
+              {deleting ? 'Deleting...' : 'Delete Investor Entry'}
             </button>
           </div>
           {resendResult && <p className="mt-2 text-xs text-gray-600">{resendResult}</p>}

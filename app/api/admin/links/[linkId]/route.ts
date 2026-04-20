@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { verifyAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink } from '@/db';
+import { getLinkById, updateLink, deleteLink } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -41,4 +43,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   });
 
   return NextResponse.json({ success: true, link: getLinkById(linkId) });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ linkId: string }> }) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { linkId } = await params;
+  const link = getLinkById(linkId);
+  if (!link) {
+    return NextResponse.json({ error: 'Link not found' }, { status: 404 });
+  }
+
+  const filePaths = deleteLink(linkId);
+
+  for (const p of filePaths) {
+    try {
+      if (p && fs.existsSync(p)) fs.unlinkSync(p);
+    } catch (err) {
+      console.warn(`[delete link] failed to unlink ${p}:`, err);
+    }
+  }
+
+  const dataDir = process.env.DATABASE_PATH ? path.dirname(process.env.DATABASE_PATH) : './data';
+  const draftDir = path.join(dataDir, 'drafts', linkId);
+  if (fs.existsSync(draftDir)) {
+    try {
+      fs.rmSync(draftDir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`[delete link] failed to remove drafts dir ${draftDir}:`, err);
+    }
+  }
+
+  return NextResponse.json({ success: true });
 }
