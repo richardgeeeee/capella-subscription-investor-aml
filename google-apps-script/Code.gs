@@ -12,7 +12,9 @@
  * Expected POST body: application/json
  * {
  *   "apiKey":       string,  // must match API_KEY
- *   "folderName":   string,  // e.g. "001 Jin ZHANG"
+ *   "folderName":   string,  // e.g. "001 ZHANG Jin"
+ *   "folderId":     string,  // optional — if provided, use this folder directly
+ *                            //            and rename it to folderName if needed
  *   "fileName":     string,  // e.g. "ZHANG Jin-HKID.pdf"
  *   "documentType": string,  // informational
  *   "mimeType":     string,  // e.g. "application/pdf"
@@ -30,6 +32,7 @@ function doPost(e) {
     }
 
     var folderName = body.folderName;
+    var folderId = body.folderId;
     var fileName = body.fileName;
     var fileBase64 = body.fileBase64;
     var mimeType = body.mimeType || 'application/octet-stream';
@@ -41,13 +44,28 @@ function doPost(e) {
     var amlFolderId = PropertiesService.getScriptProperties().getProperty('AML_FOLDER_ID');
     var amlFolder = DriveApp.getFolderById(amlFolderId);
 
-    // Find or create investor-specific folder by exact name
-    var investorFolder;
-    var folders = amlFolder.getFoldersByName(folderName);
-    if (folders.hasNext()) {
-      investorFolder = folders.next();
-    } else {
-      investorFolder = amlFolder.createFolder(folderName);
+    // Resolve the investor-specific folder:
+    // 1. If folderId is provided and valid, use it and rename if needed.
+    // 2. Else fall back to name lookup, creating if missing.
+    var investorFolder = null;
+    if (folderId) {
+      try {
+        investorFolder = DriveApp.getFolderById(folderId);
+        if (investorFolder.getName() !== folderName) {
+          investorFolder.setName(folderName);
+        }
+      } catch (e) {
+        // Folder id stale/invalid; fall through to name-based lookup.
+        investorFolder = null;
+      }
+    }
+    if (!investorFolder) {
+      var folders = amlFolder.getFoldersByName(folderName);
+      if (folders.hasNext()) {
+        investorFolder = folders.next();
+      } else {
+        investorFolder = amlFolder.createFolder(folderName);
+      }
     }
 
     // Replace existing file with the same name

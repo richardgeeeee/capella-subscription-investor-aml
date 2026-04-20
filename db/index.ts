@@ -151,6 +151,7 @@ function runMigrations(db: Database.Database) {
   if (!columnExists(db, 'links', 'first_name')) db.exec(`ALTER TABLE links ADD COLUMN first_name TEXT`);
   if (!columnExists(db, 'links', 'last_name')) db.exec(`ALTER TABLE links ADD COLUMN last_name TEXT`);
   if (!columnExists(db, 'links', 'share_class')) db.exec(`ALTER TABLE links ADD COLUMN share_class TEXT`);
+  if (!columnExists(db, 'links', 'drive_folder_id')) db.exec(`ALTER TABLE links ADD COLUMN drive_folder_id TEXT`);
   if (!columnExists(db, 'links', 'sequence_number')) {
     db.exec(`ALTER TABLE links ADD COLUMN sequence_number INTEGER`);
     // Backfill: assign sequence numbers to existing rows by created_at order
@@ -524,6 +525,11 @@ export function resetFileSyncStatusForLink(linkId: string) {
   return db.prepare(`UPDATE uploaded_files SET drive_sync_status = 'pending', drive_file_id = NULL WHERE link_id = ?`).run(linkId);
 }
 
+export function setLinkDriveFolderId(linkId: string, folderId: string) {
+  const db = getDb();
+  return db.prepare(`UPDATE links SET drive_folder_id = ? WHERE id = ?`).run(folderId, linkId);
+}
+
 export function updateLink(id: string, params: {
   firstName?: string;
   lastName?: string;
@@ -691,6 +697,7 @@ export interface LinkRow {
   expires_at: string;
   created_at: string;
   is_revoked: number;
+  drive_folder_id: string | null;
 }
 
 export interface LinkEventRow {

@@ -496,7 +496,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                   <p className="text-xs text-gray-500">Drive Folder</p>
                   <p className="font-medium text-gray-900 text-xs">
                     {link.sequence_number && link.first_name && link.last_name
-                      ? `${String(link.sequence_number).padStart(3, '0')} ${link.first_name} ${link.last_name.toUpperCase()}`
+                      ? `${String(link.sequence_number).padStart(3, '0')} ${link.last_name.toUpperCase()} ${link.first_name}`
                       : '-'}
                   </p>
                 </div>

@@ -64,7 +64,7 @@ export function formatDisplayName(
   return `${prefix}-${label}${suffix}${ext}`;
 }
 
-/** "001 Jin ZHANG" */
+/** "001 ZHANG Jin" — seq, uppercase last name, first name. */
 export function formatDriveFolderName(
   firstName: string | null,
   lastName: string | null,
@@ -72,7 +72,7 @@ export function formatDriveFolderName(
   sequenceNumber: number | null
 ): string {
   const seq = String(sequenceNumber || 0).padStart(3, '0');
-  const namePart = firstName && lastName ? `${firstName} ${lastName.toUpperCase()}` : fallbackName;
+  const namePart = firstName && lastName ? `${lastName.toUpperCase()} ${firstName}` : fallbackName;
   return `${seq} ${namePart}`;
 }
 

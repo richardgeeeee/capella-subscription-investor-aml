@@ -7,6 +7,7 @@ import {
   updateSubmissionSyncStatus,
   updateFileSyncStatus,
   resetFileSyncStatusForLink,
+  setLinkDriveFolderId,
   getSubmissionVersions,
   type LinkRow,
 } from '@/db';
@@ -100,6 +101,20 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
   updateSubmissionSyncStatus(submissionId, 'syncing');
   const folderName = formatDriveFolderName(link.first_name, link.last_name, link.investor_name, link.sequence_number);
 
+  // Carry the Drive folder id across all uploads. If we already know it, GAS
+  // will use that folder directly (and rename it if the name changed). The
+  // first response that contains a folderId backfills the cache for legacy
+  // links that predate this column.
+  const folderCtx: { folderId: string | null } = { folderId: link.drive_folder_id };
+  const upload = async (params: { fileName: string; documentType: string; file: File }) => {
+    const result = await uploadFileToGAS({ ...params, folderName, folderId: folderCtx.folderId });
+    if (result?.folderId && result.folderId !== folderCtx.folderId) {
+      folderCtx.folderId = result.folderId;
+      setLinkDriveFolderId(link.id, result.folderId);
+    }
+    return result;
+  };
+
   try {
     // 1. Sync form data as CSV snapshot of the latest version
     const versions = getSubmissionVersions(submissionId);
@@ -112,12 +127,7 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
     const formBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const formFile = new File([formBlob], formFileName, { type: 'text/csv;charset=utf-8' });
 
-    await uploadFileToGAS({
-      folderName,
-      fileName: formFileName,
-      documentType: 'form_data',
-      file: formFile,
-    });
+    await upload({ fileName: formFileName, documentType: 'form_data', file: formFile });
 
     // 2. Sync uploaded files (skip already synced unless force)
     const files = getFilesByLinkId(link.id);
@@ -132,12 +142,7 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
           || formatDisplayName(link.first_name, link.last_name, link.investor_name, fileRecord.document_type, fileRecord.original_name);
         const file = new File([fileBuffer], fileName, { type: fileRecord.mime_type });
 
-        const result = await uploadFileToGAS({
-          folderName,
-          fileName,
-          documentType: fileRecord.document_type,
-          file,
-        });
+        const result = await upload({ fileName, documentType: fileRecord.document_type, file });
 
         updateFileSyncStatus(fileRecord.id, 'synced', result?.fileId);
       } catch (err) {
@@ -147,7 +152,7 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
     }
 
     // 3. Sync any draft agreement files in /app/data/drafts/{linkId}/
-    await syncDraftAgreements(link, folderName);
+    await syncDraftAgreements(link, folderName, upload);
 
     updateSubmissionSyncStatus(submissionId, 'synced');
   } catch (err) {
@@ -157,7 +162,10 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
   }
 }
 
-async function syncDraftAgreements(link: LinkRow, folderName: string): Promise<void> {
+type UploadFn = (params: { fileName: string; documentType: string; file: File }) => Promise<{ fileId?: string; folderId?: string } | null>;
+
+async function syncDraftAgreements(link: LinkRow, folderName: string, upload: UploadFn): Promise<void> {
+  void folderName; // folderName is resolved inside upload(); kept for future logging
   const draftDir = path.join(process.env.DATABASE_PATH ? path.dirname(process.env.DATABASE_PATH) : './data', 'drafts', link.id);
   if (!fs.existsSync(draftDir)) return;
 
@@ -172,7 +180,7 @@ async function syncDraftAgreements(link: LinkRow, folderName: string): Promise<v
         ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         : fileName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
       const file = new File([buffer], fileName, { type: mimeType });
-      await uploadFileToGAS({ folderName, fileName, documentType: 'draft_agreement', file });
+      await upload({ fileName, documentType: 'draft_agreement', file });
     } catch (err) {
       console.error(`[Google Drive Sync] Failed to sync draft agreement ${fileName}:`, err);
     }
@@ -181,10 +189,11 @@ async function syncDraftAgreements(link: LinkRow, folderName: string): Promise<v
 
 async function uploadFileToGAS(params: {
   folderName: string;
+  folderId: string | null;
   fileName: string;
   documentType: string;
   file: File;
-}): Promise<{ fileId?: string } | null> {
+}): Promise<{ fileId?: string; folderId?: string } | null> {
   const arrayBuffer = await params.file.arrayBuffer();
   const fileBase64 = Buffer.from(arrayBuffer).toString('base64');
 
@@ -194,6 +203,7 @@ async function uploadFileToGAS(params: {
     body: JSON.stringify({
       apiKey: GAS_API_KEY!,
       folderName: params.folderName,
+      folderId: params.folderId || undefined,
       fileName: params.fileName,
       documentType: params.documentType,
       mimeType: params.file.type || 'application/octet-stream',
