@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/admin-auth';
 import { getLinkById, getEmailTemplate } from '@/db';
 import { sendInvitationEmail } from '@/lib/email';
+import { formatLinkTag } from '@/lib/file-naming';
 
 export async function POST(request: Request) {
   const isAdmin = await verifyAdminSession();
@@ -31,7 +32,8 @@ export async function POST(request: Request) {
   }
 
   const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-  const url = `${baseUrl}/submit/${link.token}`;
+  const tag = formatLinkTag(link.first_name, link.last_name);
+  const url = `${baseUrl}/submit/${link.token}${tag ? `?n=${tag}` : ''}`;
 
   try {
     await sendInvitationEmail(

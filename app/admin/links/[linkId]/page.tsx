@@ -65,6 +65,13 @@ interface DraftFile {
 
 const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
 
+function buildLinkTag(firstName: string | null, lastName: string | null): string {
+  const f = (firstName || '').trim().toLowerCase();
+  const l = (lastName || '').trim().toLowerCase();
+  if (!f || !l) return '';
+  return `${f.charAt(0)}${l}`;
+}
+
 /** Converts camelCase keys like "investorName" → "Investor_Name". */
 function formatFieldName(key: string): string {
   return key
@@ -445,10 +452,10 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                   <p className="text-xs text-gray-500 mb-1">Unique Submission Link</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 bg-gray-50 border rounded px-2 py-1 text-xs text-gray-700 break-all">
-                      {typeof window !== 'undefined' ? `${window.location.origin}/submit/${link.token}` : `/submit/${link.token}`}
+                      {(() => { const tag = buildLinkTag(link.first_name, link.last_name); const base = typeof window !== 'undefined' ? `${window.location.origin}/submit/${link.token}` : `/submit/${link.token}`; return tag ? `${base}?n=${tag}` : base; })()}
                     </code>
                     <button
-                      onClick={() => handleCopy(`${window.location.origin}/submit/${link.token}`)}
+                      onClick={() => { const tag = buildLinkTag(link.first_name, link.last_name); const base = `${window.location.origin}/submit/${link.token}`; handleCopy(tag ? `${base}?n=${tag}` : base); }}
                       className={`p-2 rounded-lg border transition-colors ${copied ? 'bg-green-100 border-green-300 text-green-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
                       title={copied ? 'Copied!' : 'Copy to clipboard'}
                     >

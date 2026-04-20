@@ -103,6 +103,14 @@ function formatAgreementDate(subscriptionDate: string): string {
   return `${day}${month} ${monthName} ${year}`;
 }
 
+/** "jzhang" — first-name initial + full last name, all lowercase. Used as ?n= in links. */
+export function formatLinkTag(firstName: string | null, lastName: string | null): string {
+  const f = (firstName || '').trim().toLowerCase();
+  const l = (lastName || '').trim().toLowerCase();
+  if (!f || !l) return '';
+  return `${f.charAt(0)}${l}`;
+}
+
 function extractExt(fileName: string): string {
   const idx = fileName.lastIndexOf('.');
   if (idx <= 0) return '';
