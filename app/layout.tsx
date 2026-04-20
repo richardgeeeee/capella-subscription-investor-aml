@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DialogProvider } from "@/components/Dialog";
 
 export const metadata: Metadata = {
   title: "Capella Alpha Fund - Investor KYC",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh" className="h-full antialiased">
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <DialogProvider>{children}</DialogProvider>
+      </body>
     </html>
   );
 }

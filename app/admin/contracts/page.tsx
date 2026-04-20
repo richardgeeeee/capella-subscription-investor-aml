@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useDialog } from '@/components/Dialog';
 
 interface Template {
   id: string;
@@ -45,6 +46,7 @@ function ContractsContent() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [mappings, setMappings] = useState<Array<{ placeholder: string; formField: string }>>([{ placeholder: '', formField: '' }]);
   const [uploading, setUploading] = useState(false);
+  const { alert } = useDialog();
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -89,7 +91,11 @@ function ContractsContent() {
       setMappings([{ placeholder: '', formField: '' }]);
       fetchTemplates();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      await alert({
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Upload failed',
+        variant: 'error',
+      });
     } finally {
       setUploading(false);
     }
@@ -123,7 +129,11 @@ function ContractsContent() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Generation failed');
+      await alert({
+        title: 'Generation failed',
+        message: err instanceof Error ? err.message : 'Generation failed',
+        variant: 'error',
+      });
     } finally {
       setGenerating(null);
     }

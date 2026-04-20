@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useDialog } from '@/components/Dialog';
 
 interface InvestorLink {
   id: string;
@@ -22,6 +23,7 @@ export default function EmailTemplatesPage() {
   const [selectedLinkId, setSelectedLinkId] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'success' | 'error' | null>(null);
+  const { alert } = useDialog();
 
   useEffect(() => {
     Promise.all([
@@ -55,7 +57,11 @@ export default function EmailTemplatesPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save failed');
+      await alert({
+        title: 'Save failed',
+        message: err instanceof Error ? err.message : 'Save failed',
+        variant: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -84,7 +90,11 @@ export default function EmailTemplatesPage() {
       setTimeout(() => setSendResult(null), 5000);
     } catch (err) {
       setSendResult('error');
-      alert(err instanceof Error ? err.message : 'Failed to send');
+      await alert({
+        title: 'Failed to send',
+        message: err instanceof Error ? err.message : 'Failed to send',
+        variant: 'error',
+      });
     } finally {
       setSending(false);
     }

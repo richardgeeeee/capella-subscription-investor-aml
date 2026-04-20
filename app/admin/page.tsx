@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { SHARE_CLASSES, type ShareClass } from '@/lib/constants';
+import { useDialog } from '@/components/Dialog';
 
 interface LinkData {
   id: string;
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
   const [sendingLinkId, setSendingLinkId] = useState<string | null>(null);
   const [sentLinkIds, setSentLinkIds] = useState<Set<string>>(new Set());
   const [deletingLinkId, setDeletingLinkId] = useState<string | null>(null);
+  const { confirm, alert } = useDialog();
 
   const fetchLinks = useCallback(async () => {
     try {
@@ -127,7 +129,11 @@ export default function AdminDashboard() {
         if (typeof d?.next === 'number') setSuggestedSequence(d.next);
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create link');
+      await alert({
+        title: 'Failed to create link',
+        message: err instanceof Error ? err.message : 'Failed to create link',
+        variant: 'error',
+      });
     } finally {
       setCreating(false);
     }
@@ -145,7 +151,11 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(data.error || 'Failed to send');
       setEmailSent(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to send email');
+      await alert({
+        title: 'Failed to send email',
+        message: err instanceof Error ? err.message : 'Failed to send email',
+        variant: 'error',
+      });
     } finally {
       setSendingEmail(false);
     }
@@ -154,9 +164,13 @@ export default function AdminDashboard() {
   const handleDelete = async (link: LinkData) => {
     const label = link.investor_name || link.investor_email || link.id;
     const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
-    const ok = window.confirm(
-      `Delete ${seq}${label}?\n\nThis permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence number ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`
-    );
+    const ok = await confirm({
+      title: `Delete ${seq}${label}?`,
+      message: `This permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence number ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
     if (!ok) return;
     setDeletingLinkId(link.id);
     try {
@@ -168,14 +182,24 @@ export default function AdminDashboard() {
         if (typeof d?.next === 'number') setSuggestedSequence(d.next);
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete');
+      await alert({
+        title: 'Failed to delete',
+        message: err instanceof Error ? err.message : 'Failed to delete',
+        variant: 'error',
+      });
     } finally {
       setDeletingLinkId(null);
     }
   };
 
   const handleSendForLink = async (linkId: string, email: string) => {
-    const ok = window.confirm(`Send invitation email to ${email}?`);
+    const ok = await confirm({
+      title: 'Send invitation email?',
+      message: `Send invitation email to ${email}?`,
+      variant: 'warning',
+      confirmLabel: 'Send',
+      cancelLabel: 'Cancel',
+    });
     if (!ok) return;
     setSendingLinkId(linkId);
     try {
@@ -188,7 +212,11 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(data.error || 'Failed to send');
       setSentLinkIds(prev => new Set(prev).add(linkId));
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to send email');
+      await alert({
+        title: 'Failed to send email',
+        message: err instanceof Error ? err.message : 'Failed to send email',
+        variant: 'error',
+      });
     } finally {
       setSendingLinkId(null);
     }

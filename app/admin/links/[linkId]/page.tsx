@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
+import { useDialog } from '@/components/Dialog';
 
 interface VersionData {
   id: string;
@@ -198,6 +199,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [resending, setResending] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const { confirm, alert } = useDialog();
 
   const fetchData = useCallback(async () => {
     try {
@@ -325,9 +327,13 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const handleDeleteLink = async () => {
     if (!link) return;
     const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
-    const ok = window.confirm(
-      `Delete ${seq}${link.investor_name}?\n\nThis permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`
-    );
+    const ok = await confirm({
+      title: `Delete ${seq}${link.investor_name}?`,
+      message: `This permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
     if (!ok) return;
     setDeleting(true);
     try {
@@ -336,7 +342,11 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       window.location.href = '/admin';
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete');
+      await alert({
+        title: 'Failed to delete',
+        message: err instanceof Error ? err.message : 'Failed to delete',
+        variant: 'error',
+      });
       setDeleting(false);
     }
   };
