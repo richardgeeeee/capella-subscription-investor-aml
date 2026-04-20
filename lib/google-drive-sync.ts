@@ -107,9 +107,10 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
     const formDataJson = latestVersion?.form_data || submission.form_data;
     const versionLabel = latestVersion ? `_v${latestVersion.version_number}` : '';
     const formFileName = `${folderName}-Form Data${versionLabel}.csv`;
-    const csvContent = formDataToCsv(formDataJson);
-    const formBlob = new Blob([csvContent], { type: 'text/csv' });
-    const formFile = new File([formBlob], formFileName, { type: 'text/csv' });
+    // Prepend UTF-8 BOM so Excel detects the encoding and renders Chinese correctly.
+    const csvContent = '\ufeff' + formDataToCsv(formDataJson);
+    const formBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const formFile = new File([formBlob], formFileName, { type: 'text/csv;charset=utf-8' });
 
     await uploadFileToGAS({
       folderName,
