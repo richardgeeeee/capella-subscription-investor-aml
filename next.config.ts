@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  serverExternalPackages: ['better-sqlite3'],
+  serverExternalPackages: ['better-sqlite3', '@napi-rs/canvas', 'pdf-parse', 'pdf-to-img', 'pdfjs-dist'],
   // Next's file tracer misses modules that are only dynamically required.
   // `@napi-rs/canvas` is loaded by pdfjs-dist at runtime (via pdf-parse /
   // pdf-to-img) to supply DOMMatrix/ImageData/Path2D, and `pdf-parse` itself
