@@ -1,33 +1,25 @@
 import './canvas-polyfill';
 import fs from 'fs';
-import OpenAI from 'openai';
 
 /**
- * Address verification via MiniMax (or any OpenAI-compatible provider).
+ * Address verification via MiniMax Anthropic-compatible endpoint.
  *
  * Env vars:
- * - LLM_API_KEY        — required
- * - LLM_BASE_URL       — OpenAI-compatible base, e.g. "https://api.minimax.io/v1"
- * - LLM_TEXT_MODEL     — text model for extracted PDF text (e.g. "MiniMax-Text-01")
- * - LLM_VISION_MODEL   — vision model for images (e.g. "MiniMax-VL-01")
+ * - LLM_API_KEY        — required (Token Plan sk-cp- keys supported)
+ * - LLM_BASE_URL       — OpenAI-compatible base, e.g. "https://api.minimaxi.com/v1"
+ *                         (the Anthropic endpoint is derived as {origin}/anthropic/v1/messages)
+ * - LLM_TEXT_MODEL     — model for text (default: "MiniMax-M2.7")
+ * - LLM_VISION_MODEL   — model for images (default: "MiniMax-M2.7")
  *
- * Text PDFs  → extract text via pdf-parse → send to text model.
- * Scanned PDFs / images → send as base64 data URI to vision model.
- *
- * The canvas-polyfill import provides DOMMatrix/Path2D/ImageData stubs so
- * pdfjs-dist initializes without @napi-rs/canvas (needed on Alpine Docker).
+ * Token Plan keys (sk-cp-) only work with the Anthropic-compatible
+ * endpoint using x-api-key auth, NOT the OpenAI-compatible endpoint.
+ * All calls go through the Anthropic Messages format.
  */
 
-let client: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({
-      apiKey: process.env.LLM_API_KEY,
-      baseURL: process.env.LLM_BASE_URL,
-    });
-  }
-  return client;
+function getAnthropicEndpoint(): string {
+  const base = process.env.LLM_BASE_URL!;
+  const origin = new URL(base).origin;
+  return `${origin}/anthropic/v1/messages`;
 }
 
 export interface AddressVerifyResult {
@@ -71,38 +63,59 @@ export async function verifyAddressAgainstDocument(
   };
 }
 
-// --------------- Vision path (OpenAI-compatible endpoint) ---------------
+// --------------- Anthropic Messages API ---------------
+
+async function callAnthropic(
+  model: string,
+  userContent: string | Array<Record<string, unknown>>
+): Promise<string> {
+  const endpoint = getAnthropicEndpoint();
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.LLM_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 500,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`LLM API error ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const result = await response.json();
+  return result.content?.[0]?.text || '';
+}
+
+// --------------- Vision path ---------------
 
 async function verifyImageViaVision(
   base64: string,
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
-  const model = process.env.LLM_VISION_MODEL;
-  if (!model) throw new Error('LLM_VISION_MODEL is not configured');
+  const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
 
-  const response = await getClient().chat.completions.create({
-    model,
-    max_tokens: 500,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: { url: `data:${mimeType};base64,${base64}` },
-          },
-          {
-            type: 'text',
-            text: `User-claimed address:\n"""\n${userAddress}\n"""`,
-          },
-        ],
-      },
-    ],
-  });
+  const text = await callAnthropic(model, [
+    {
+      type: 'image',
+      source: { type: 'base64', media_type: mimeType, data: base64 },
+    },
+    {
+      type: 'text',
+      text: `User-claimed address:\n"""\n${userAddress}\n"""`,
+    },
+  ]);
 
-  return parseResult(response.choices[0]?.message?.content || '');
+  return parseResult(text);
 }
 
 // --------------- PDF path ---------------
@@ -126,17 +139,25 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return verifyPdfText(text, userAddress);
   }
 
-  // No usable text (scanned PDF). Try rendering page 1 to image then vision.
-  const model = process.env.LLM_VISION_MODEL;
-  if (!model) {
-    return {
-      match: false,
-      extracted_address: '',
-      reason: 'PDF has no text layer and LLM_VISION_MODEL is not configured.',
-      skipped: true,
-    };
+  // No usable text — try sending PDF as document block (Anthropic format)
+  const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
+  try {
+    const responseText = await callAnthropic(model, [
+      {
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
+      },
+      {
+        type: 'text',
+        text: `User-claimed address:\n"""\n${userAddress}\n"""`,
+      },
+    ]);
+    return parseResult(responseText);
+  } catch (err) {
+    console.warn('[verifyPdf] document vision failed, trying local render:', err instanceof Error ? err.message : err);
   }
 
+  // Fallback: render to image
   try {
     const { pdf: pdfToImg } = await import('pdf-to-img');
     const doc = await pdfToImg(buffer, { scale: 2 });
@@ -147,31 +168,22 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return {
       match: false,
       extracted_address: '',
-      reason: `PDF has no extractable text and local rendering failed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
+      reason: `PDF has no extractable text and rendering failed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
       skipped: true,
     };
   }
 }
 
 async function verifyPdfText(text: string, userAddress: string): Promise<AddressVerifyResult> {
-  const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL;
-  if (!model) throw new Error('LLM_TEXT_MODEL is not configured');
-
+  const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
   const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
 
-  const response = await getClient().chat.completions.create({
+  const responseText = await callAnthropic(
     model,
-    max_tokens: 500,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `Extracted text from the address proof document:\n"""\n${truncated}\n"""\n\nUser-claimed address:\n"""\n${userAddress}\n"""`,
-      },
-    ],
-  });
+    `Extracted text from the address proof document:\n"""\n${truncated}\n"""\n\nUser-claimed address:\n"""\n${userAddress}\n"""`,
+  );
 
-  return parseResult(response.choices[0]?.message?.content || '');
+  return parseResult(responseText);
 }
 
 // --------------- Shared ---------------
