@@ -88,39 +88,55 @@ async function verifyViaVision(
 
   const endpoint = getAnthropicEndpoint();
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 500,
-      system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: source.type,
-            source: {
-              type: 'base64',
-              media_type: source.mediaType,
-              data: source.base64,
-            },
+  const apiKey = process.env.LLM_API_KEY!;
+  const body = JSON.stringify({
+    model,
+    max_tokens: 500,
+    system: SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: source.type,
+          source: {
+            type: 'base64',
+            media_type: source.mediaType,
+            data: source.base64,
           },
-          {
-            type: 'text',
-            text: `User-claimed address:\n"""\n${userAddress}\n"""`,
-          },
-        ],
-      }],
-    }),
+        },
+        {
+          type: 'text',
+          text: `User-claimed address:\n"""\n${userAddress}\n"""`,
+        },
+      ],
+    }],
   });
 
+  // MiniMax's Anthropic-compatible endpoint accepts the standard Anthropic
+  // `x-api-key` + `anthropic-version` headers. Some providers also support
+  // `Authorization: Bearer`. If the first auth style returns 401, retry with
+  // the other so we work across both conventions.
+  async function send(authStyle: 'anthropic' | 'bearer'): Promise<Response> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+    if (authStyle === 'anthropic') {
+      headers['x-api-key'] = apiKey;
+    } else {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+    return fetch(endpoint, { method: 'POST', headers, body });
+  }
+
+  let response = await send('anthropic');
+  if (response.status === 401) {
+    response = await send('bearer');
+  }
+
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Vision API error ${response.status}: ${body.slice(0, 300)}`);
+    const errBody = await response.text();
+    throw new Error(`Vision API error ${response.status}: ${errBody.slice(0, 300)}`);
   }
 
   const result = await response.json();
