@@ -5,6 +5,7 @@ import {
   getLatestAddressProofFile,
   getSubmissionsByLinkId,
   updateAddressVerification,
+  logLinkEvent,
   type AddressVerification,
 } from '@/db';
 import { verifyAddressAgainstDocument } from '@/lib/address-verify';
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
       checked_at: new Date().toISOString(),
     };
     updateAddressVerification(file.id, verification);
+    logLinkEvent(linkId, 'address_verified', { status: verification.status, reason: verification.reason });
     return NextResponse.json({ verification });
   } catch (err) {
     const verification: AddressVerification = {
@@ -72,6 +74,7 @@ export async function POST(request: Request) {
       checked_at: new Date().toISOString(),
     };
     updateAddressVerification(file.id, verification);
+    logLinkEvent(linkId, 'address_verified', { status: 'failed', reason: verification.reason });
     return NextResponse.json({ verification }, { status: 200 });
   }
 }

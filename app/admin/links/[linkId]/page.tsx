@@ -9,7 +9,7 @@ interface VersionData {
   version_number: number;
   submitted_at: string;
   form_data: Record<string, string>;
-  files: { id: string; document_type: string; original_name: string; display_name: string | null; file_size: number }[];
+  files: { id: string; document_type: string; original_name: string; display_name: string | null; mime_type: string; file_size: number }[];
 }
 
 interface SubmissionData {
@@ -81,6 +81,7 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   drive_sync_success:   { label: 'Synced to Drive',           color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
   drive_sync_failed:    { label: 'Drive sync failed',         color: 'bg-red-100 text-red-700',         icon: '⚠️' },
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
+  address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
 };
 
 function renderEventDetail(ev: TimelineEvent): string {
@@ -105,6 +106,7 @@ function renderEventDetail(ev: TimelineEvent): string {
       const changes = (d.changes as Record<string, { from: unknown; to: unknown }>) || {};
       return Object.keys(changes).map(k => `${k}: ${formatVal(changes[k].from)} → ${formatVal(changes[k].to)}`).join('; ');
     }
+    case 'address_verified': return `${d.status || '?'}${d.reason ? ' — ' + d.reason : ''}`;
     default: return '';
   }
 }
@@ -200,6 +202,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [resendResult, setResendResult] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [verifyingAddress, setVerifyingAddress] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ id: string; name: string; mimeType: string } | null>(null);
   const { confirm, alert } = useDialog();
 
   const fetchData = useCallback(async () => {
@@ -727,13 +730,23 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                       {formatSize(d.size)} &middot; Generated {new Date(d.mtime).toLocaleString()}
                     </p>
                   </div>
-                  <a
-                    href={`/api/admin/drafts/${linkId}/${encodeURIComponent(d.name)}`}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                    download
-                  >
-                    Download
-                  </a>
+                  <div className="flex items-center gap-3">
+                    {d.name.endsWith('.pdf') && (
+                      <button
+                        onClick={() => setPreviewFile({ id: `draft:${linkId}/${encodeURIComponent(d.name)}`, name: d.name, mimeType: 'application/pdf' })}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Preview
+                      </button>
+                    )}
+                    <a
+                      href={`/api/admin/drafts/${linkId}/${encodeURIComponent(d.name)}`}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                      download
+                    >
+                      Download
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
@@ -883,7 +896,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                                   <div className="flex items-center gap-2">
                                     <span className="text-gray-500">{f.document_type}</span>
                                     <span className="text-gray-400">{formatSize(f.file_size)}</span>
-                                    <a href={`/api/admin/files/${f.id}`} download className="text-blue-600 hover:text-blue-800">Download</a>
+                                    <button onClick={() => setPreviewFile({ id: f.id, name: f.display_name || f.original_name, mimeType: f.mime_type })} className="text-blue-600 hover:text-blue-800">Preview</button>
+                                    <a href={`/api/admin/files/${f.id}`} download className="text-gray-500 hover:text-gray-700">Download</a>
                                   </div>
                                 </div>
                               ))}
@@ -953,9 +967,15 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     }`}>
                       {file.drive_sync_status}
                     </span>
+                    <button
+                      onClick={() => setPreviewFile({ id: file.id, name: file.display_name || file.original_name, mimeType: file.mime_type })}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Preview
+                    </button>
                     <a
                       href={`/api/admin/files/${file.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-800"
+                      className="text-sm text-gray-500 hover:text-gray-700"
                       download
                     >
                       Download
@@ -968,6 +988,68 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           )}
         </div>
       </div>
+
+      {/* File preview modal */}
+      {previewFile && (() => {
+        const isDraft = previewFile.id.startsWith('draft:');
+        const url = isDraft
+          ? `/api/admin/drafts/${previewFile.id.slice(6)}?inline=1`
+          : `/api/admin/files/${previewFile.id}?inline=1`;
+        const downloadUrl = isDraft
+          ? `/api/admin/drafts/${previewFile.id.slice(6)}`
+          : `/api/admin/files/${previewFile.id}`;
+        const isImage = previewFile.mimeType.startsWith('image/');
+        const isPdf = previewFile.mimeType === 'application/pdf';
+        const canPreview = isImage || isPdf;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setPreviewFile(null)}
+          >
+            <div
+              className="bg-white rounded-lg shadow-2xl flex flex-col max-h-[90vh] w-full max-w-5xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b px-4 py-3 bg-gray-50">
+                <h3 className="text-sm font-semibold text-gray-900 truncate">{previewFile.name}</h3>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <a
+                    href={downloadUrl}
+                    download
+                    className="text-xs px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+                  >
+                    Download
+                  </a>
+                  <button
+                    onClick={() => setPreviewFile(null)}
+                    className="text-gray-400 hover:text-gray-600 p-1"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-100 min-h-[60vh]">
+                {isImage && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={url} alt={previewFile.name} className="max-w-full max-h-[80vh] object-contain" />
+                )}
+                {isPdf && (
+                  <iframe src={url} className="w-full h-[80vh] border-0" title={previewFile.name} />
+                )}
+                {!canPreview && (
+                  <div className="text-center py-12 text-gray-500">
+                    <p className="text-lg mb-2">Preview not available</p>
+                    <p className="text-sm">{previewFile.mimeType}</p>
+                    <a href={downloadUrl} download className="mt-4 inline-block text-blue-600 hover:text-blue-800">
+                      Download file
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

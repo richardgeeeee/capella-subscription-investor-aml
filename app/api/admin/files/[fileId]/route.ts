@@ -25,10 +25,14 @@ export async function GET(
 
   const buffer = fs.readFileSync(file.stored_path);
   const downloadName = file.display_name || file.original_name;
+  const inline = request.nextUrl.searchParams.get('inline') === '1';
+  const disposition = inline
+    ? `inline; filename="${encodeURIComponent(downloadName)}"`
+    : `attachment; filename="${encodeURIComponent(downloadName)}"`;
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': file.mime_type,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadName)}"`,
+      'Content-Disposition': disposition,
       'Content-Length': String(buffer.length),
     },
   });

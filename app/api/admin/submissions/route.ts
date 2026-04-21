@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
             document_type: f.document_type,
             original_name: f.original_name,
             display_name: f.display_name,
+            mime_type: f.mime_type,
             file_size: f.file_size,
           })),
       })),

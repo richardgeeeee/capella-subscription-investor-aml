@@ -4,7 +4,7 @@ import path from 'path';
 import { verifyAdminSession } from '@/lib/admin-auth';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ linkId: string; fileName: string }> }
 ) {
   const isAdmin = await verifyAdminSession();
@@ -33,10 +33,14 @@ export async function GET(
     ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     : ext === '.pdf' ? 'application/pdf' : 'application/octet-stream';
 
+  const inline = new URL(request.url).searchParams.get('inline') === '1';
+  const disposition = inline
+    ? `inline; filename="${encodeURIComponent(decodedFileName)}"`
+    : `attachment; filename="${encodeURIComponent(decodedFileName)}"`;
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': mimeType,
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(decodedFileName)}"`,
+      'Content-Disposition': disposition,
       'Content-Length': String(buffer.length),
     },
   });
