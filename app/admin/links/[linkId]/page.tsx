@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, useRef, use } from 'react';
 import Link from 'next/link';
 import { useDialog } from '@/components/Dialog';
 
@@ -203,6 +203,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [deleting, setDeleting] = useState(false);
   const [verifyingAddress, setVerifyingAddress] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ id: string; name: string; mimeType: string } | null>(null);
+  const autoVerifyTriggered = useRef(false);
   const { confirm, alert } = useDialog();
 
   const fetchData = useCallback(async () => {
@@ -232,6 +233,18 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   }, [linkId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Auto-trigger address verification when page loads with unverified address proof
+  useEffect(() => {
+    if (autoVerifyTriggered.current || loading || verifyingAddress) return;
+    const addressProof = files.find(f => f.document_type === 'address_proof');
+    if (!addressProof || addressProof.address_verification) return;
+    const hasAddress = submissions[0]?.form_data?.residentialAddress;
+    if (!hasAddress) return;
+    autoVerifyTriggered.current = true;
+    handleReVerifyAddress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, files, submissions]);
 
   const handleSyncToDrive = async (force = false) => {
     setSyncing(true);
