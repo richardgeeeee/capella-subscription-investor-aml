@@ -180,6 +180,27 @@ function runMigrations(db: Database.Database) {
   if (!columnExists(db, 'links', 'subscription_amount')) {
     db.exec(`ALTER TABLE links ADD COLUMN subscription_amount TEXT`);
   }
+
+  // Backfill target_subscription_date and subscription_amount from existing form_data
+  const unfilled = db.prepare(`
+    SELECT l.id, s.form_data FROM links l
+    JOIN submissions s ON s.link_id = l.id
+    WHERE (l.target_subscription_date IS NULL OR l.subscription_amount IS NULL)
+      AND s.form_data != '{}'
+    ORDER BY s.updated_at DESC
+  `).all() as { id: string; form_data: string }[];
+  const seen = new Set<string>();
+  const backfill = db.prepare(`UPDATE links SET target_subscription_date = COALESCE(target_subscription_date, ?), subscription_amount = COALESCE(subscription_amount, ?) WHERE id = ?`);
+  for (const row of unfilled) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    try {
+      const fd = JSON.parse(row.form_data);
+      const d = typeof fd.subscriptionDate === 'string' ? fd.subscriptionDate : null;
+      const a = typeof fd.subscriptionAmount === 'string' ? fd.subscriptionAmount : null;
+      if (d || a) backfill.run(d, a, row.id);
+    } catch { /* skip malformed JSON */ }
+  }
 }
 
 function seedDefaultEmailTemplates(db: Database.Database) {
