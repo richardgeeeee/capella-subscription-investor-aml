@@ -199,6 +199,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [resending, setResending] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [verifyingAddress, setVerifyingAddress] = useState(false);
   const { confirm, alert } = useDialog();
 
   const fetchData = useCallback(async () => {
@@ -324,6 +325,29 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     }
   };
 
+  const handleReVerifyAddress = async () => {
+    setVerifyingAddress(true);
+    try {
+      const res = await fetch('/api/admin/verify-address', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        await alert({
+          title: 'Verification failed',
+          message: data.error || 'Unknown error',
+          variant: 'error',
+        });
+        return;
+      }
+      fetchData();
+    } finally {
+      setVerifyingAddress(false);
+    }
+  };
+
   const handleDeleteLink = async () => {
     if (!link) return;
     const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
@@ -389,13 +413,11 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const currentFormData = latestSubmission?.form_data || {};
   const versions = latestSubmission?.versions || [];
 
-  // Surface address mismatch from the most recent address_proof
+  // Latest address proof + its verification state (for the Address Verification card)
   const latestAddressProof = files
     .filter(f => f.document_type === 'address_proof')
     .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0];
-  const addressIssue = latestAddressProof?.address_verification?.status === 'mismatched'
-    ? latestAddressProof.address_verification
-    : null;
+  const addressVerification = latestAddressProof?.address_verification || null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -624,31 +646,73 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           )}
         </div>
 
-        {/* Address verification warning */}
-        {addressIssue && (
-          <div className="bg-red-50 border border-red-300 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-              <div className="text-sm text-red-700 flex-1">
-                <p className="font-semibold">Address mismatch detected in the uploaded address proof</p>
-                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-xs text-red-500">User entered</p>
-                    <p className="text-sm">{addressIssue.user_address}</p>
+        {/* Address verification card — always shown when address_proof exists */}
+        {latestAddressProof && (() => {
+          const v = addressVerification;
+          const status = v?.status;
+          const palette = (() => {
+            switch (status) {
+              case 'matched':    return { bg: 'bg-green-50',  border: 'border-green-300',  text: 'text-green-800',  sub: 'text-green-700',  label: 'text-green-600', icon: 'text-green-600', badge: 'bg-green-100 text-green-700',   title: 'Address matches' };
+              case 'mismatched': return { bg: 'bg-red-50',    border: 'border-red-300',    text: 'text-red-800',    sub: 'text-red-700',    label: 'text-red-500',   icon: 'text-red-600',   badge: 'bg-red-100 text-red-700',       title: 'Address does NOT match' };
+              case 'pending':    return { bg: 'bg-blue-50',   border: 'border-blue-300',   text: 'text-blue-800',   sub: 'text-blue-700',   label: 'text-blue-500',  icon: 'text-blue-600',  badge: 'bg-blue-100 text-blue-700',     title: 'Verifying…' };
+              case 'failed':     return { bg: 'bg-amber-50',  border: 'border-amber-300',  text: 'text-amber-800',  sub: 'text-amber-700',  label: 'text-amber-500', icon: 'text-amber-600', badge: 'bg-amber-100 text-amber-700',   title: 'Verification failed' };
+              case 'skipped':    return { bg: 'bg-gray-50',   border: 'border-gray-300',   text: 'text-gray-800',   sub: 'text-gray-600',   label: 'text-gray-500',  icon: 'text-gray-600',  badge: 'bg-gray-100 text-gray-700',     title: 'Verification skipped' };
+              default:           return { bg: 'bg-gray-50',   border: 'border-gray-300',   text: 'text-gray-800',   sub: 'text-gray-600',   label: 'text-gray-500',  icon: 'text-gray-600',  badge: 'bg-gray-100 text-gray-700',     title: 'Not verified yet' };
+            }
+          })();
+
+          const iconPath = (() => {
+            if (status === 'matched')    return 'M5 13l4 4L19 7';
+            if (status === 'mismatched') return 'M6 18L18 6M6 6l12 12';
+            if (status === 'pending')    return 'M12 8v4l2 2';
+            return 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z';
+          })();
+
+          return (
+            <div className={`${palette.bg} border ${palette.border} rounded-lg p-4`}>
+              <div className="flex items-start gap-3">
+                <svg className={`w-6 h-6 flex-shrink-0 mt-0.5 ${palette.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={iconPath} />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className={`text-sm font-semibold ${palette.text}`}>Address Verification — {palette.title}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded ${palette.badge}`}>{status || 'not run'}</span>
+                    <button
+                      onClick={handleReVerifyAddress}
+                      disabled={verifyingAddress}
+                      className="ml-auto text-xs px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {verifyingAddress ? 'Verifying…' : 'Re-verify'}
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-xs text-red-500">Extracted from document</p>
-                    <p className="text-sm">{addressIssue.extracted_address || '(not found)'}</p>
-                  </div>
+
+                  {v && (
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className={`p-3 bg-white rounded border ${palette.border}`}>
+                        <p className={`text-xs uppercase tracking-wide ${palette.label}`}>User entered</p>
+                        <p className={`text-sm mt-1 break-words ${palette.text}`}>{v.user_address || '(empty)'}</p>
+                      </div>
+                      <div className={`p-3 bg-white rounded border ${palette.border}`}>
+                        <p className={`text-xs uppercase tracking-wide ${palette.label}`}>Extracted from document</p>
+                        <p className={`text-sm mt-1 break-words ${palette.text}`}>{v.extracted_address || '(not found)'}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {v?.reason && (
+                    <p className={`text-xs mt-3 ${palette.sub}`}>{v.reason}</p>
+                  )}
+                  <p className={`text-xs mt-2 ${palette.label}`}>
+                    Document: <span className="font-mono">{latestAddressProof.display_name || latestAddressProof.original_name}</span>
+                    {v?.checked_at && <> &middot; Checked {new Date(v.checked_at).toLocaleString()}</>}
+                    {!v && <> &middot; No check run yet — click Re-verify</>}
+                  </p>
                 </div>
-                {addressIssue.reason && <p className="text-xs mt-2 text-red-600">{addressIssue.reason}</p>}
-                <p className="text-xs mt-2 text-red-500">
-                  Checked {new Date(addressIssue.checked_at).toLocaleString()}
-                </p>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Draft Agreements */}
         {drafts.length > 0 && (
@@ -842,24 +906,38 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             <p className="text-gray-500 text-sm">No files uploaded yet.</p>
           ) : (
             <div className="space-y-2">
-              {files.map((file) => (
-                <div key={file.id} className={`flex items-center justify-between p-3 rounded-lg ${
-                  file.address_verification?.status === 'mismatched' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'
-                }`}>
+              {files.map((file) => {
+                const av = file.address_verification;
+                const rowBg = av?.status === 'mismatched' ? 'bg-red-50 border border-red-200'
+                  : av?.status === 'matched' ? 'bg-green-50 border border-green-200'
+                  : av?.status === 'pending' ? 'bg-blue-50 border border-blue-200'
+                  : av?.status === 'failed' ? 'bg-amber-50 border border-amber-200'
+                  : 'bg-gray-50';
+                return (
+                <div key={file.id} className={`flex items-center justify-between p-3 rounded-lg ${rowBg}`}>
                   <div>
                     <p className="text-sm font-medium text-gray-900">
                       {file.display_name || file.original_name}
-                      {file.address_verification?.status === 'mismatched' && (
+                      {av?.status === 'mismatched' && (
                         <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                           Address mismatch
                         </span>
                       )}
-                      {file.address_verification?.status === 'matched' && (
+                      {av?.status === 'matched' && (
                         <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                           Address matched
                         </span>
+                      )}
+                      {av?.status === 'pending' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Verifying…</span>
+                      )}
+                      {av?.status === 'failed' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">Verification failed</span>
+                      )}
+                      {av?.status === 'skipped' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">Skipped</span>
                       )}
                     </p>
                     <p className="text-xs text-gray-500">
@@ -884,7 +962,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     </a>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
