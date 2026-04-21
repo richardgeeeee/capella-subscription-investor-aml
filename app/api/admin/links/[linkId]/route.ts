@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const body = await request.json();
-  const { firstName, lastName, sequenceNumber, shareClass, investorEmail } = body;
+  const { firstName, lastName, sequenceNumber, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount } = body;
 
   if (sequenceNumber !== undefined && (!Number.isInteger(sequenceNumber) || sequenceNumber <= 0)) {
     return NextResponse.json({ error: 'sequenceNumber must be a positive integer' }, { status: 400 });
@@ -34,12 +34,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
     }
   }
 
+  if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== null && targetSubscriptionDate !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetSubscriptionDate)) {
+      return NextResponse.json({ error: 'targetSubscriptionDate must be YYYY-MM-DD' }, { status: 400 });
+    }
+  }
+
   updateLink(linkId, {
     firstName: firstName !== undefined ? firstName : undefined,
     lastName: lastName !== undefined ? lastName : undefined,
     sequenceNumber: sequenceNumber !== undefined ? sequenceNumber : undefined,
     shareClass: shareClass !== undefined ? shareClass : undefined,
     investorEmail: investorEmail !== undefined ? investorEmail : undefined,
+    targetSubscriptionDate: targetSubscriptionDate !== undefined ? targetSubscriptionDate : undefined,
+    subscriptionAmount: subscriptionAmount !== undefined ? subscriptionAmount : undefined,
   });
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -48,6 +56,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   if (sequenceNumber !== undefined && sequenceNumber !== link.sequence_number) changes.sequenceNumber = { from: link.sequence_number, to: sequenceNumber };
   if (shareClass !== undefined && shareClass !== link.share_class) changes.shareClass = { from: link.share_class, to: shareClass };
   if (investorEmail !== undefined && (investorEmail || null) !== link.investor_email) changes.investorEmail = { from: link.investor_email, to: investorEmail };
+  if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== link.target_subscription_date) changes.targetSubscriptionDate = { from: link.target_subscription_date, to: targetSubscriptionDate };
+  if (subscriptionAmount !== undefined && subscriptionAmount !== link.subscription_amount) changes.subscriptionAmount = { from: link.subscription_amount, to: subscriptionAmount };
   if (Object.keys(changes).length > 0) {
     logLinkEvent(linkId, 'admin_edit', { changes });
   }

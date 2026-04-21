@@ -9,12 +9,15 @@ const paymentSchema = z.object({
 });
 
 const monthEndDate = z.string().min(1, 'Required').refine((value) => {
-  // YYYY-MM-DD format, and must be the last day of that month
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   return d === lastDay;
-}, 'Subscription date must be the last day of a month');
+}, 'Subscription date must be the last day of a month').refine((value) => {
+  const [y, m] = value.split('-').map(Number);
+  const now = new Date();
+  return y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1);
+}, 'Subscription date cannot be in the past');
 
 /** Accepts "100000", "100,000", "$100,000", "100000.00" etc. */
 function parseAmount(raw: string): number {

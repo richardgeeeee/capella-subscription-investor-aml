@@ -26,6 +26,11 @@ function toYearMonth(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
 
+function getCurrentYearMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function MonthEndDateField({
   fieldKey,
   lang,
@@ -39,6 +44,7 @@ export function MonthEndDateField({
   const subLabel = t(fieldKey, otherLang);
 
   const yearMonth = toYearMonth(value);
+  const minMonth = getCurrentYearMonth();
 
   const handleChange = (ym: string) => {
     onChange(ym ? getLastDayOfMonth(ym) : '');
@@ -56,6 +62,7 @@ export function MonthEndDateField({
       <input
         type="month"
         value={yearMonth}
+        min={minMonth}
         onChange={(e) => handleChange(e.target.value)}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white"
       />

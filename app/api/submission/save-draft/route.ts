@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
-import { getOrCreateSubmission, updateSubmissionFormData } from '@/db';
+import { getOrCreateSubmission, updateSubmissionFormData, updateLink } from '@/db';
 
 export async function POST(request: Request) {
   const session = await getSessionFromCookie();
@@ -27,6 +27,17 @@ export async function POST(request: Request) {
 
   const submission = getOrCreateSubmission(result.link!.id, session.email);
   updateSubmissionFormData(submission.id, JSON.stringify(formData));
+
+  // Sync subscription date and amount to links table for admin dashboard
+  const linkId = result.link!.id;
+  const subDate = typeof formData.subscriptionDate === 'string' ? formData.subscriptionDate : undefined;
+  const subAmount = typeof formData.subscriptionAmount === 'string' ? formData.subscriptionAmount : undefined;
+  if (subDate !== undefined || subAmount !== undefined) {
+    updateLink(linkId, {
+      targetSubscriptionDate: subDate || undefined,
+      subscriptionAmount: subAmount || undefined,
+    });
+  }
 
   return NextResponse.json({ success: true, submissionId: submission.id });
 }

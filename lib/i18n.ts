@@ -10,7 +10,7 @@ export const labels: Record<string, { en: string; zh: string }> = {
   // -- Subscription fields --
   investorName: { en: 'Full Name of Investor', zh: '投资者全名' },
   shareClass: { en: 'Share Class', zh: '基金份额类别' },
-  subscriptionDate: { en: 'Date of Subscription', zh: '申购日期' },
+  subscriptionDate: { en: 'Target Subscription Date', zh: '计划认购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
   footnote_subscription_amount: {
     en: 'Minimum USD 100,000. Must be a multiple of USD 10,000.',
@@ -132,8 +132,8 @@ export const labels: Record<string, { en: string; zh: string }> = {
     zh: '请说明本次投资的目的（例如：资本增值、资本保值、投资组合多元化、退休规划等）',
   },
   footnote_subscription_date: {
-    en: 'Subscription date must be the last day of a month.',
-    zh: '申购日期必须为每月的最后一天。',
+    en: 'Target subscription date must be the last day of a month and cannot be in the past. NAV calculation will begin on the 1st of the month following the subscription date.',
+    zh: '计划认购日期必须为每月的最后一天，且不能选择过去的日期。NAV 计算将从认购日期所在月末后的下一个月1号开始。',
   },
   footnote_asset_proof: {
     en: 'Required for SFC professional investor qualification. Proof of liquid assets (cash, stocks, bonds, etc.) exceeding HKD 8 million within the last 3 months. Not required if investing HKD 8 million or more.',

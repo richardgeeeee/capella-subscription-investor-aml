@@ -56,6 +56,8 @@ interface LinkDetail {
   investor_type: string;
   expires_at: string;
   created_at: string;
+  target_subscription_date: string | null;
+  subscription_amount: string | null;
 }
 
 interface DraftFile {
@@ -193,6 +195,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [editLast, setEditLast] = useState('');
   const [editShareClass, setEditShareClass] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editTargetDate, setEditTargetDate] = useState('');
+  const [editSubAmount, setEditSubAmount] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -273,6 +277,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     setEditLast(link.last_name || '');
     setEditShareClass(link.share_class || '');
     setEditEmail(link.investor_email || '');
+    setEditTargetDate(link.target_subscription_date || '');
+    setEditSubAmount(link.subscription_amount || '');
     setSaveError(null);
     setEditing(true);
   };
@@ -296,6 +302,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           sequenceNumber: seq,
           shareClass: editShareClass || null,
           investorEmail: editEmail || null,
+          targetSubscriptionDate: editTargetDate || null,
+          subscriptionAmount: editSubAmount || null,
         }),
       });
       const data = await res.json();
@@ -493,6 +501,25 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     {SHARE_CLASSES.map(sc => <option key={sc} value={sc}>{sc}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Target Date</label>
+                  <input
+                    type="date"
+                    value={editTargetDate}
+                    onChange={e => setEditTargetDate(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Amount (USD)</label>
+                  <input
+                    type="text"
+                    value={editSubAmount}
+                    onChange={e => setEditSubAmount(e.target.value)}
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    placeholder="e.g. 100000"
+                  />
+                </div>
                 <div className="col-span-2 md:col-span-4">
                   <label className="text-xs text-gray-500 block mb-1">Investor Email</label>
                   <input
@@ -539,6 +566,16 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                 <div>
                   <p className="text-xs text-gray-500">Share Class</p>
                   <p className="font-medium text-gray-900">{link.share_class || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Target Date</p>
+                  <p className="font-medium text-gray-900">{link.target_subscription_date || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Amount (USD)</p>
+                  <p className="font-medium text-gray-900">
+                    {link.subscription_amount ? `$${Number(link.subscription_amount.replace(/[^0-9.]/g, '')).toLocaleString()}` : '-'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Drive Folder</p>

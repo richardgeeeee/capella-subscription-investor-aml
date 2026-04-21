@@ -172,6 +172,14 @@ function runMigrations(db: Database.Database) {
   if (!columnExists(db, 'contract_templates', 'kind')) {
     db.exec(`ALTER TABLE contract_templates ADD COLUMN kind TEXT NOT NULL DEFAULT 'other'`);
   }
+
+  // links — target subscription date & amount (admin-editable, synced from form)
+  if (!columnExists(db, 'links', 'target_subscription_date')) {
+    db.exec(`ALTER TABLE links ADD COLUMN target_subscription_date TEXT`);
+  }
+  if (!columnExists(db, 'links', 'subscription_amount')) {
+    db.exec(`ALTER TABLE links ADD COLUMN subscription_amount TEXT`);
+  }
 }
 
 function seedDefaultEmailTemplates(db: Database.Database) {
@@ -536,6 +544,8 @@ export function updateLink(id: string, params: {
   sequenceNumber?: number;
   shareClass?: string | null;
   investorEmail?: string | null;
+  targetSubscriptionDate?: string | null;
+  subscriptionAmount?: string | null;
 }) {
   const db = getDb();
   const sets: string[] = [];
@@ -549,6 +559,8 @@ export function updateLink(id: string, params: {
     sets.push('investor_email = ?');
     values.push(params.investorEmail ? params.investorEmail.toLowerCase() : null);
   }
+  if (params.targetSubscriptionDate !== undefined) { sets.push('target_subscription_date = ?'); values.push(params.targetSubscriptionDate || null); }
+  if (params.subscriptionAmount !== undefined) { sets.push('subscription_amount = ?'); values.push(params.subscriptionAmount || null); }
 
   if (sets.length === 0) return;
 
@@ -698,6 +710,8 @@ export interface LinkRow {
   created_at: string;
   is_revoked: number;
   drive_folder_id: string | null;
+  target_subscription_date: string | null;
+  subscription_amount: string | null;
 }
 
 export interface LinkEventRow {

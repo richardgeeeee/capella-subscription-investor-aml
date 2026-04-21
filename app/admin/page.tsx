@@ -21,6 +21,8 @@ interface LinkData {
   submission_count: number;
   latest_status: string | null;
   latest_sync_status: string | null;
+  target_subscription_date: string | null;
+  subscription_amount: string | null;
 }
 
 interface AdminUser {
@@ -425,6 +427,42 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Subscription summary by target date */}
+        {!loading && (() => {
+          const byDate: Record<string, { count: number; total: number }> = {};
+          for (const link of links) {
+            if (!link.target_subscription_date || !link.subscription_amount) continue;
+            const d = link.target_subscription_date;
+            const n = Number(link.subscription_amount.replace(/[^0-9.]/g, ''));
+            if (isNaN(n)) continue;
+            if (!byDate[d]) byDate[d] = { count: 0, total: 0 };
+            byDate[d].count++;
+            byDate[d].total += n;
+          }
+          const dates = Object.keys(byDate).sort();
+          if (dates.length === 0) return null;
+          const grandTotal = dates.reduce((s, d) => s + byDate[d].total, 0);
+          return (
+            <div className="mb-4 bg-white rounded-lg shadow p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Subscription Summary by Target Date</h3>
+              <div className="flex flex-wrap gap-3">
+                {dates.map(d => (
+                  <div key={d} className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                    <div className="font-medium text-blue-800">{d}</div>
+                    <div className="text-blue-600">{byDate[d].count} investor{byDate[d].count > 1 ? 's' : ''} · <span className="font-semibold">${byDate[d].total.toLocaleString()}</span></div>
+                  </div>
+                ))}
+                {dates.length > 1 && (
+                  <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                    <div className="font-medium text-gray-700">Total</div>
+                    <div className="text-gray-600 font-semibold">${grandTotal.toLocaleString()}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Links table */}
         {loading ? (
           <p className="text-gray-500">Loading...</p>
@@ -437,10 +475,10 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Target Date</th>
+                  <th className="text-right px-4 py-3 text-gray-600 font-medium">Amount (USD)</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Sync</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Created</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Expires</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -458,10 +496,10 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-4 py-3 text-gray-600 capitalize">{link.investor_type}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">{link.share_class || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{link.target_subscription_date || '-'}</td>
+                    <td className="px-4 py-3 text-right text-gray-600 text-xs whitespace-nowrap">{link.subscription_amount ? `$${Number(link.subscription_amount.replace(/[^0-9.]/g, '')).toLocaleString()}` : '-'}</td>
                     <td className="px-4 py-3">{getStatusBadge(link)}</td>
                     <td className="px-4 py-3 text-gray-600">{link.latest_sync_status || '-'}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(link.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(link.expires_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         {link.investor_email && (
