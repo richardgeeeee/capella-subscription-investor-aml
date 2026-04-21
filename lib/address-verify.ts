@@ -92,7 +92,10 @@ async function callAnthropic(
   }
 
   const result = await response.json();
-  return result.content?.[0]?.text || '';
+  // MiniMax M2.7 returns [{ type: 'thinking', ... }, { type: 'text', text: '...' }]
+  const blocks = Array.isArray(result.content) ? result.content : [];
+  const textBlock = blocks.find((b: Record<string, unknown>) => b.type === 'text');
+  return (textBlock?.text as string) || '';
 }
 
 // --------------- Vision path ---------------
