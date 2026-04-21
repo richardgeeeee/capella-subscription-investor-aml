@@ -2,17 +2,20 @@ import fs from 'fs';
 import OpenAI from 'openai';
 
 /**
- * Address verification uses any OpenAI-compatible LLM endpoint.
- * Configure via env vars:
- * - LLM_API_KEY           — required
- * - LLM_BASE_URL          — e.g. "https://open.bigmodel.cn/api/paas/v4"  (GLM / Zhipu)
- *                         — or  "https://api.minimax.chat/v1"           (MiniMax)
- * - LLM_VISION_MODEL      — model that accepts images (e.g. "glm-4v-plus", "glm-4.5v", "MiniMax-VL-01")
- * - LLM_TEXT_MODEL        — text-only model used for PDF text extracts (e.g. "glm-4-plus", "abab6.5s-chat")
+ * Address verification via MiniMax (or any provider with OpenAI + Anthropic endpoints).
  *
- * For PDFs we try to extract the text layer first (cheaper + works for most
- * utility bills / bank statements). If the PDF is a scanned image with no
- * text layer we report status="skipped" so an admin can review manually.
+ * Env vars:
+ * - LLM_API_KEY        — required
+ * - LLM_BASE_URL       — OpenAI-compatible base, e.g. "https://api.minimax.io/v1"
+ * - LLM_TEXT_MODEL     — text model for extracted PDF text (e.g. "MiniMax-Text-01")
+ * - LLM_VISION_MODEL   — vision model for images (e.g. "MiniMax-VL-01")
+ *
+ * Text PDFs  → extract text via pdf-parse → send to text model (OpenAI SDK).
+ * Scanned PDFs → render page 1 as PNG via pdf-to-img → send to vision model.
+ * Image files → send directly to vision model.
+ *
+ * Vision uses raw fetch to the provider's Anthropic-compatible endpoint
+ * because MiniMax's OpenAI endpoint silently ignores image_url blocks.
  */
 
 let client: OpenAI | null = null;
@@ -27,11 +30,16 @@ function getClient(): OpenAI {
   return client;
 }
 
+function getAnthropicEndpoint(): string {
+  const base = process.env.LLM_BASE_URL!;
+  const origin = new URL(base).origin;
+  return `${origin}/anthropic/v1/messages`;
+}
+
 export interface AddressVerifyResult {
   match: boolean;
   extracted_address: string;
   reason: string;
-  /** If we could not attempt verification (e.g. scanned PDF w/o text) */
   skipped?: boolean;
 }
 
@@ -59,7 +67,7 @@ export async function verifyAddressAgainstDocument(
   const isImage = mimeType.startsWith('image/');
 
   if (isPdf) return verifyPdf(filePath, userAddress);
-  if (isImage) return verifyImage(filePath, mimeType, userAddress);
+  if (isImage) return verifyImageViaVision(fs.readFileSync(filePath).toString('base64'), mimeType, userAddress);
 
   return {
     match: false,
@@ -69,36 +77,62 @@ export async function verifyAddressAgainstDocument(
   };
 }
 
-async function verifyImage(
-  filePath: string,
+// --------------- Vision path (Anthropic-compatible endpoint) ---------------
+
+async function verifyImageViaVision(
+  base64: string,
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
   const model = process.env.LLM_VISION_MODEL;
   if (!model) throw new Error('LLM_VISION_MODEL is not configured');
 
-  const base64 = fs.readFileSync(filePath).toString('base64');
-  const dataUrl = `data:${mimeType};base64,${base64}`;
+  const endpoint = getAnthropicEndpoint();
 
-  const response = await getClient().chat.completions.create({
-    model,
-    max_tokens: 500,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 500,
+      system: SYSTEM_PROMPT,
+      messages: [{
         role: 'user',
         content: [
-          { type: 'image_url', image_url: { url: dataUrl } },
-          { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mimeType,
+              data: base64,
+            },
+          },
+          {
+            type: 'text',
+            text: `User-claimed address:\n"""\n${userAddress}\n"""`,
+          },
         ],
-      },
-    ],
+      }],
+    }),
   });
 
-  return parseResult(response.choices[0]?.message?.content || '');
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Vision API error ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const result = await response.json();
+  const text = result.content?.[0]?.text || '';
+  return parseResult(text);
 }
 
+// --------------- PDF path ---------------
+
 async function verifyPdf(filePath: string, userAddress: string): Promise<AddressVerifyResult> {
+  // Step 1: try text extraction
   const { PDFParse } = await import('pdf-parse');
   const buffer = fs.readFileSync(filePath);
   let text = '';
@@ -111,19 +145,40 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     text = '';
   }
 
-  if (text.length < 50) {
+  if (text.length >= 50) {
+    return verifyPdfText(text, userAddress);
+  }
+
+  // Step 2: scanned PDF — render page 1 as PNG → vision model
+  const model = process.env.LLM_VISION_MODEL;
+  if (!model) {
     return {
       match: false,
       extracted_address: '',
-      reason: 'PDF appears to be scanned (no text layer); manual review required.',
+      reason: 'PDF has no text layer and LLM_VISION_MODEL is not configured.',
       skipped: true,
     };
   }
 
+  try {
+    const { pdf: pdfToImg } = await import('pdf-to-img');
+    const doc = await pdfToImg(buffer, { scale: 2 });
+    const pageImage = await doc.getPage(1);
+    return verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+  } catch (err) {
+    return {
+      match: false,
+      extracted_address: '',
+      reason: `Failed to render scanned PDF: ${err instanceof Error ? err.message : String(err)}`,
+      skipped: true,
+    };
+  }
+}
+
+async function verifyPdfText(text: string, userAddress: string): Promise<AddressVerifyResult> {
   const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL;
   if (!model) throw new Error('LLM_TEXT_MODEL is not configured');
 
-  // Cap text length to avoid huge inputs — first 6000 chars is plenty for an address
   const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
 
   const response = await getClient().chat.completions.create({
@@ -141,13 +196,14 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
   return parseResult(response.choices[0]?.message?.content || '');
 }
 
+// --------------- Shared ---------------
+
 function parseResult(raw: string): AddressVerifyResult {
   if (!raw) throw new Error('Model returned empty response');
   const stripped = raw.trim()
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/, '');
-  // Some models still wrap or prose around JSON — try to extract the first JSON object
   const firstBrace = stripped.indexOf('{');
   const lastBrace = stripped.lastIndexOf('}');
   const jsonStr = firstBrace >= 0 && lastBrace > firstBrace

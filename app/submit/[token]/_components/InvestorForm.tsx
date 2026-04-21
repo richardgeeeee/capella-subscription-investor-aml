@@ -199,15 +199,18 @@ export function InvestorForm({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => autoSave(updated), 1000);
 
-      // Trigger address verification (debounced inside helper) when individual
-      // address or (for corporate) company address changes
+      // Trigger address verification only when both address proof is uploaded
+      // AND residential address is filled
       if (investorType === 'individual' && key === 'residentialAddress') {
-        triggerAddressVerify(value);
+        const hasProof = uploadedFiles.some(f => f.documentType === 'address_proof');
+        if (hasProof && value.trim()) {
+          triggerAddressVerify(value);
+        }
       }
 
       return updated;
     });
-  }, [autoSave, investorType, triggerAddressVerify]);
+  }, [autoSave, investorType, triggerAddressVerify, uploadedFiles]);
 
   const handleFileUploaded = useCallback((file: { id: string; originalName: string; fileSize: number; documentType: string }) => {
     setUploadedFiles(prev => {
