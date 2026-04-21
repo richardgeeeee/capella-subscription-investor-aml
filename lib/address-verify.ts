@@ -79,9 +79,8 @@ export async function verifyAddressAgainstDocument(
 
 // --------------- Vision path (Anthropic-compatible endpoint) ---------------
 
-async function verifyImageViaVision(
-  base64: string,
-  mimeType: string,
+async function verifyViaVision(
+  source: { type: 'image' | 'document'; mediaType: string; base64: string },
   userAddress: string
 ): Promise<AddressVerifyResult> {
   const model = process.env.LLM_VISION_MODEL;
@@ -103,11 +102,11 @@ async function verifyImageViaVision(
         role: 'user',
         content: [
           {
-            type: 'image',
+            type: source.type,
             source: {
               type: 'base64',
-              media_type: mimeType,
-              data: base64,
+              media_type: source.mediaType,
+              data: source.base64,
             },
           },
           {
@@ -129,19 +128,32 @@ async function verifyImageViaVision(
   return parseResult(text);
 }
 
+async function verifyImageViaVision(
+  base64: string,
+  mimeType: string,
+  userAddress: string
+): Promise<AddressVerifyResult> {
+  return verifyViaVision({ type: 'image', mediaType: mimeType, base64 }, userAddress);
+}
+
 // --------------- PDF path ---------------
 
 async function verifyPdf(filePath: string, userAddress: string): Promise<AddressVerifyResult> {
-  // Step 1: try text extraction
-  const { PDFParse } = await import('pdf-parse');
   const buffer = fs.readFileSync(filePath);
+
+  // Step 1: try text extraction via pdf-parse.
+  // The module import + PDFParse construction can throw on servers missing
+  // the @napi-rs/canvas native bindings (DOMMatrix not defined), so wrap
+  // everything — including the dynamic import — in try/catch.
   let text = '';
   try {
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
     text = (result.text || '').trim();
     await parser.destroy();
-  } catch {
+  } catch (err) {
+    console.warn('[verifyPdf] text extraction failed:', err instanceof Error ? err.message : err);
     text = '';
   }
 
@@ -149,7 +161,9 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return verifyPdfText(text, userAddress);
   }
 
-  // Step 2: scanned PDF — render page 1 as PNG → vision model
+  // Step 2: no usable text — send the PDF directly to the vision model.
+  // The Anthropic Messages format accepts a document block with media_type
+  // application/pdf, so we don't need to render locally (avoids @napi-rs/canvas).
   const model = process.env.LLM_VISION_MODEL;
   if (!model) {
     return {
@@ -161,17 +175,26 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
   }
 
   try {
-    const { pdf: pdfToImg } = await import('pdf-to-img');
-    const doc = await pdfToImg(buffer, { scale: 2 });
-    const pageImage = await doc.getPage(1);
-    return verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+    return await verifyViaVision(
+      { type: 'document', mediaType: 'application/pdf', base64: buffer.toString('base64') },
+      userAddress
+    );
   } catch (err) {
-    return {
-      match: false,
-      extracted_address: '',
-      reason: `Failed to render scanned PDF: ${err instanceof Error ? err.message : String(err)}`,
-      skipped: true,
-    };
+    // Fall back to local PDF→image rendering if the provider rejects documents.
+    console.warn('[verifyPdf] direct PDF vision failed, trying local render:', err instanceof Error ? err.message : err);
+    try {
+      const { pdf: pdfToImg } = await import('pdf-to-img');
+      const doc = await pdfToImg(buffer, { scale: 2 });
+      const pageImage = await doc.getPage(1);
+      return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+    } catch (renderErr) {
+      return {
+        match: false,
+        extracted_address: '',
+        reason: `Failed to process PDF: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
+        skipped: true,
+      };
+    }
   }
 }
 
