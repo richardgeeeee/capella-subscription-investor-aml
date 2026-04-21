@@ -72,7 +72,7 @@ export const labels: Record<string, { en: string; zh: string }> = {
   // -- Document types (individual) --
   passport_front: { en: 'Passport Front Page (showing photo, name, DOB, nationality)', zh: '护照首页复印件（显示照片、姓名、出生日期和国籍）' },
   passport_signature: { en: 'Passport Signature Page', zh: '护照签字页复印件' },
-  id_card: { en: 'ID Card (Mainland China / Hong Kong)', zh: '身份证复印件（内地身份证或香港身份证）' },
+  id_card: { en: 'National ID Card (HKID / NRIC / Mainland ID / etc.)', zh: '身份证复印件（香港身份证、新加坡NRIC、内地身份证等）' },
   address_proof: { en: 'Address Proof (within 3 months)', zh: '地址证明（最近三个月内）' },
   liquid_asset_proof: { en: 'Liquid Asset Proof > HKD 8M (if subscription < HKD 8M)', zh: '流动资产证明（超过800万港币，如申购金额低于800万港币）' },
 

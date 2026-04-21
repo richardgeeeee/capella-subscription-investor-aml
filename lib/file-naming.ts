@@ -13,7 +13,7 @@ const DOC_LABELS: Record<string, string> = {
   // Individual
   passport_front: 'Passport Front',
   passport_signature: 'Passport Signature',
-  id_card: 'HKID',
+  id_card: 'ID Card',
   address_proof: 'Address proof',
   liquid_asset_proof: 'Asset proof',
 
@@ -32,7 +32,7 @@ const DOC_LABELS: Record<string, string> = {
   audited_financial_statements: 'Audited Financial Statements',
   personnel_passport_front: 'Personnel Passport Front',
   personnel_passport_signature: 'Personnel Passport Signature',
-  personnel_id_card: 'Personnel HKID',
+  personnel_id_card: 'Personnel ID Card',
   personnel_address_proof: 'Personnel Address proof',
 };
 
