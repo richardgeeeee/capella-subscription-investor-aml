@@ -1,8 +1,9 @@
+import './canvas-polyfill';
 import fs from 'fs';
 import OpenAI from 'openai';
 
 /**
- * Address verification via MiniMax (or any provider with OpenAI + Anthropic endpoints).
+ * Address verification via MiniMax (or any OpenAI-compatible provider).
  *
  * Env vars:
  * - LLM_API_KEY        — required
@@ -10,12 +11,11 @@ import OpenAI from 'openai';
  * - LLM_TEXT_MODEL     — text model for extracted PDF text (e.g. "MiniMax-Text-01")
  * - LLM_VISION_MODEL   — vision model for images (e.g. "MiniMax-VL-01")
  *
- * Text PDFs  → extract text via pdf-parse → send to text model (OpenAI SDK).
- * Scanned PDFs → render page 1 as PNG via pdf-to-img → send to vision model.
- * Image files → send directly to vision model.
+ * Text PDFs  → extract text via pdf-parse → send to text model.
+ * Scanned PDFs / images → send as base64 data URI to vision model.
  *
- * Vision uses raw fetch to the provider's Anthropic-compatible endpoint
- * because MiniMax's OpenAI endpoint silently ignores image_url blocks.
+ * The canvas-polyfill import provides DOMMatrix/Path2D/ImageData stubs so
+ * pdfjs-dist initializes without @napi-rs/canvas (needed on Alpine Docker).
  */
 
 let client: OpenAI | null = null;
@@ -28,12 +28,6 @@ function getClient(): OpenAI {
     });
   }
   return client;
-}
-
-function getAnthropicEndpoint(): string {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  return `${origin}/anthropic/v1/messages`;
 }
 
 export interface AddressVerifyResult {
@@ -77,79 +71,38 @@ export async function verifyAddressAgainstDocument(
   };
 }
 
-// --------------- Vision path (Anthropic-compatible endpoint) ---------------
-
-async function verifyViaVision(
-  source: { type: 'image' | 'document'; mediaType: string; base64: string },
-  userAddress: string
-): Promise<AddressVerifyResult> {
-  const model = process.env.LLM_VISION_MODEL;
-  if (!model) throw new Error('LLM_VISION_MODEL is not configured');
-
-  const endpoint = getAnthropicEndpoint();
-
-  const apiKey = process.env.LLM_API_KEY!;
-  const body = JSON.stringify({
-    model,
-    max_tokens: 500,
-    system: SYSTEM_PROMPT,
-    messages: [{
-      role: 'user',
-      content: [
-        {
-          type: source.type,
-          source: {
-            type: 'base64',
-            media_type: source.mediaType,
-            data: source.base64,
-          },
-        },
-        {
-          type: 'text',
-          text: `User-claimed address:\n"""\n${userAddress}\n"""`,
-        },
-      ],
-    }],
-  });
-
-  // MiniMax's Anthropic-compatible endpoint accepts the standard Anthropic
-  // `x-api-key` + `anthropic-version` headers. Some providers also support
-  // `Authorization: Bearer`. If the first auth style returns 401, retry with
-  // the other so we work across both conventions.
-  async function send(authStyle: 'anthropic' | 'bearer'): Promise<Response> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    };
-    if (authStyle === 'anthropic') {
-      headers['x-api-key'] = apiKey;
-    } else {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-    return fetch(endpoint, { method: 'POST', headers, body });
-  }
-
-  let response = await send('anthropic');
-  if (response.status === 401) {
-    response = await send('bearer');
-  }
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Vision API error ${response.status}: ${errBody.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  const text = result.content?.[0]?.text || '';
-  return parseResult(text);
-}
+// --------------- Vision path (OpenAI-compatible endpoint) ---------------
 
 async function verifyImageViaVision(
   base64: string,
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
-  return verifyViaVision({ type: 'image', mediaType: mimeType, base64 }, userAddress);
+  const model = process.env.LLM_VISION_MODEL;
+  if (!model) throw new Error('LLM_VISION_MODEL is not configured');
+
+  const response = await getClient().chat.completions.create({
+    model,
+    max_tokens: 500,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: { url: `data:${mimeType};base64,${base64}` },
+          },
+          {
+            type: 'text',
+            text: `User-claimed address:\n"""\n${userAddress}\n"""`,
+          },
+        ],
+      },
+    ],
+  });
+
+  return parseResult(response.choices[0]?.message?.content || '');
 }
 
 // --------------- PDF path ---------------
@@ -157,10 +110,6 @@ async function verifyImageViaVision(
 async function verifyPdf(filePath: string, userAddress: string): Promise<AddressVerifyResult> {
   const buffer = fs.readFileSync(filePath);
 
-  // Step 1: try text extraction via pdf-parse.
-  // The module import + PDFParse construction can throw on servers missing
-  // the @napi-rs/canvas native bindings (DOMMatrix not defined), so wrap
-  // everything — including the dynamic import — in try/catch.
   let text = '';
   try {
     const { PDFParse } = await import('pdf-parse');
@@ -177,9 +126,7 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return verifyPdfText(text, userAddress);
   }
 
-  // Step 2: no usable text — send the PDF directly to the vision model.
-  // The Anthropic Messages format accepts a document block with media_type
-  // application/pdf, so we don't need to render locally (avoids @napi-rs/canvas).
+  // No usable text (scanned PDF). Try rendering page 1 to image then vision.
   const model = process.env.LLM_VISION_MODEL;
   if (!model) {
     return {
@@ -191,26 +138,18 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
   }
 
   try {
-    return await verifyViaVision(
-      { type: 'document', mediaType: 'application/pdf', base64: buffer.toString('base64') },
-      userAddress
-    );
-  } catch (err) {
-    // Fall back to local PDF→image rendering if the provider rejects documents.
-    console.warn('[verifyPdf] direct PDF vision failed, trying local render:', err instanceof Error ? err.message : err);
-    try {
-      const { pdf: pdfToImg } = await import('pdf-to-img');
-      const doc = await pdfToImg(buffer, { scale: 2 });
-      const pageImage = await doc.getPage(1);
-      return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
-    } catch (renderErr) {
-      return {
-        match: false,
-        extracted_address: '',
-        reason: `Failed to process PDF: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
-        skipped: true,
-      };
-    }
+    const { pdf: pdfToImg } = await import('pdf-to-img');
+    const doc = await pdfToImg(buffer, { scale: 2 });
+    const pageImage = await doc.getPage(1);
+    return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+  } catch (renderErr) {
+    console.warn('[verifyPdf] local PDF render failed:', renderErr instanceof Error ? renderErr.message : renderErr);
+    return {
+      match: false,
+      extracted_address: '',
+      reason: `PDF has no extractable text and local rendering failed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
+      skipped: true,
+    };
   }
 }
 
