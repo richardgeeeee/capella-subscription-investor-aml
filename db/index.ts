@@ -390,6 +390,8 @@ export function deleteLink(id: string): string[] {
       db.prepare('DELETE FROM submission_versions WHERE submission_id = ?').run(sid);
     }
     db.prepare('DELETE FROM uploaded_files WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM link_events WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM link_views WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM sessions WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM verification_codes WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM submissions WHERE link_id = ?').run(id);
