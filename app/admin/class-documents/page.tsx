@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useDialog } from '@/components/Dialog';
 
@@ -32,6 +32,8 @@ export default function ClassDocumentsPage() {
   const [saving, setSaving] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ id: string; name: string; mimeType: string } | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
   const { confirm, alert } = useDialog();
 
   const fetchDocs = useCallback(async () => {
@@ -180,8 +182,8 @@ export default function ClassDocumentsPage() {
         {showUpload && (
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold mb-4">Upload Document for {selectedClass}</h2>
-            <form onSubmit={handleUpload} className="flex flex-wrap gap-4 items-end">
-              <div className="flex-1 min-w-[200px]">
+            <form onSubmit={handleUpload} className="space-y-4">
+              <div>
                 <label className="block text-sm text-gray-600 mb-1">Display Name</label>
                 <input
                   type="text"
@@ -192,19 +194,52 @@ export default function ClassDocumentsPage() {
                   placeholder="e.g. Term Sheet"
                 />
               </div>
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-sm text-gray-600 mb-1">File</label>
+              <div>
                 <input
+                  ref={fileInputRef}
                   type="file"
-                  onChange={e => setUploadFile(e.target.files?.[0] || null)}
-                  required
-                  className="w-full text-sm text-gray-900"
+                  onChange={e => { setUploadFile(e.target.files?.[0] || null); setDragOver(false); }}
+                  className="hidden"
                 />
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) { setUploadFile(f); if (!uploadName) setUploadName(f.name.replace(/\.[^.]+$/, '')); }
+                  }}
+                  className={`w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                    dragOver
+                      ? 'border-blue-400 bg-blue-50'
+                      : uploadFile
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-gray-300 bg-gray-50 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  {uploadFile ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-gray-900">{uploadFile.name}</p>
+                        <p className="text-xs text-gray-500">{(uploadFile.size / 1024).toFixed(0)} KB · <button type="button" onClick={e => { e.stopPropagation(); setUploadFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-red-500 hover:text-red-700 underline">Remove</button></p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                      <p className="text-sm text-gray-600 font-medium">Drag & drop a file here, or click to browse</p>
+                      <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, images, etc.</p>
+                    </>
+                  )}
+                </div>
               </div>
               <button
                 type="submit"
-                disabled={uploading}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={uploading || !uploadFile}
+                className="w-full bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
               >
                 {uploading ? 'Uploading...' : 'Upload'}
               </button>
