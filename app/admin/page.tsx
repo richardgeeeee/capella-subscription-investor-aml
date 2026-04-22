@@ -194,7 +194,7 @@ export default function AdminDashboard() {
   const handleDelete = async (link: LinkData) => {
     const ok = await confirm({
       title: `Delete ${link.investor_name}?`,
-      message: 'This permanently removes the link, all submissions, uploaded files, and generated drafts.\n\nThis cannot be undone.',
+      message: 'This removes the submission link, form data, and locally stored files from this portal.\n\nGoogle Drive files will NOT be affected.',
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',

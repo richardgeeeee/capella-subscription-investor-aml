@@ -13,6 +13,10 @@ export const labels: Record<string, { en: string; zh: string }> = {
   subscriptionDate: { en: 'Target Subscription Date', zh: '计划认购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
   footnote_subscription_amount: {
+    en: 'Minimum USD 500,000.',
+    zh: '最低申购金额为 50 万美元。',
+  },
+  footnote_subscription_amount_topup: {
     en: 'Minimum USD 100,000.',
     zh: '最低申购金额为 10 万美元。',
   },

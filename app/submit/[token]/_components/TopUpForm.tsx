@@ -217,7 +217,7 @@ export function TopUpForm({
             value={formData.subscriptionAmount || ''}
             onChange={(v) => handleFieldChange('subscriptionAmount', v)}
             required
-            footnoteKey="footnote_subscription_amount"
+            footnoteKey="footnote_subscription_amount_topup"
           />
           {(() => {
             const raw = formData.subscriptionAmount || '';
