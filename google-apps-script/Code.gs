@@ -22,6 +22,42 @@
  * }
  */
 
+/**
+ * GET handler — lists all investor subfolders in the AML folder.
+ *
+ * Query params:
+ *   ?apiKey=xxx&action=listFolders
+ *
+ * Returns: { success: true, folders: [{ id, name, url }] }
+ */
+function doGet(e) {
+  try {
+    var params = e.parameter || {};
+    var expectedKey = PropertiesService.getScriptProperties().getProperty('API_KEY');
+
+    if (!params.apiKey || params.apiKey !== expectedKey) {
+      return jsonResponse({ success: false, error: 'Unauthorized' });
+    }
+
+    if (params.action === 'listFolders') {
+      var amlFolderId = PropertiesService.getScriptProperties().getProperty('AML_FOLDER_ID');
+      var amlFolder = DriveApp.getFolderById(amlFolderId);
+      var subfolders = amlFolder.getFolders();
+      var list = [];
+      while (subfolders.hasNext()) {
+        var sub = subfolders.next();
+        list.push({ id: sub.getId(), name: sub.getName(), url: sub.getUrl() });
+      }
+      list.sort(function(a, b) { return a.name.localeCompare(b.name); });
+      return jsonResponse({ success: true, folders: list });
+    }
+
+    return jsonResponse({ success: false, error: 'Unknown action' });
+  } catch (error) {
+    return jsonResponse({ success: false, error: error.toString() });
+  }
+}
+
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents || '{}');

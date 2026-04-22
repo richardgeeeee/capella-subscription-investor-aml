@@ -126,6 +126,20 @@ CREATE TABLE IF NOT EXISTS share_class_documents (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_share_class_documents_class ON share_class_documents(share_class);
+CREATE TABLE IF NOT EXISTS investors (
+    id              TEXT PRIMARY KEY,
+    first_name      TEXT NOT NULL,
+    last_name       TEXT NOT NULL,
+    email           TEXT,
+    investor_type   TEXT NOT NULL DEFAULT 'individual',
+    share_class     TEXT,
+    drive_folder_id TEXT UNIQUE,
+    drive_folder_name TEXT,
+    drive_folder_url TEXT,
+    source          TEXT NOT NULL DEFAULT 'portal',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_investors_drive_folder ON investors(drive_folder_id);
 CREATE TABLE IF NOT EXISTS link_events (
     id              TEXT PRIMARY KEY,
     link_id         TEXT NOT NULL REFERENCES links(id),
@@ -973,4 +987,93 @@ export interface SubmissionVersionRow {
   form_data: string;
   file_ids: string;
   submitted_at: string;
+}
+
+// ---- Investor helpers ----
+
+export interface InvestorRow {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  investor_type: string;
+  share_class: string | null;
+  drive_folder_id: string | null;
+  drive_folder_name: string | null;
+  drive_folder_url: string | null;
+  source: string;
+  created_at: string;
+}
+
+export function getAllInvestors(): InvestorRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM investors ORDER BY last_name ASC, first_name ASC').all() as InvestorRow[];
+}
+
+export function getInvestorById(id: string): InvestorRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM investors WHERE id = ?').get(id) as InvestorRow | undefined;
+}
+
+export function getInvestorByDriveFolderId(driveFolderId: string): InvestorRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM investors WHERE drive_folder_id = ?').get(driveFolderId) as InvestorRow | undefined;
+}
+
+export function upsertInvestorFromDrive(params: {
+  driveFolderId: string;
+  driveFolderName: string;
+  driveFolderUrl: string;
+  firstName: string;
+  lastName: string;
+}) {
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM investors WHERE drive_folder_id = ?').get(params.driveFolderId) as { id: string } | undefined;
+  if (existing) {
+    db.prepare(`UPDATE investors SET drive_folder_name = ?, drive_folder_url = ? WHERE id = ?`)
+      .run(params.driveFolderName, params.driveFolderUrl, existing.id);
+  } else {
+    db.prepare(`INSERT INTO investors (id, first_name, last_name, drive_folder_id, drive_folder_name, drive_folder_url, source) VALUES (?, ?, ?, ?, ?, ?, 'drive')`)
+      .run(crypto.randomUUID(), params.firstName, params.lastName, params.driveFolderId, params.driveFolderName, params.driveFolderUrl);
+  }
+}
+
+export function upsertInvestorFromPortal(params: {
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  investorType?: string;
+  shareClass?: string | null;
+  driveFolderId?: string | null;
+}) {
+  const db = getDb();
+  if (params.driveFolderId) {
+    const existing = db.prepare('SELECT id FROM investors WHERE drive_folder_id = ?').get(params.driveFolderId) as { id: string } | undefined;
+    if (existing) {
+      db.prepare(`UPDATE investors SET first_name = ?, last_name = ?, email = COALESCE(?, email), investor_type = COALESCE(?, investor_type), share_class = COALESCE(?, share_class), source = 'portal' WHERE id = ?`)
+        .run(params.firstName, params.lastName, params.email || null, params.investorType || null, params.shareClass || null, existing.id);
+      return;
+    }
+  }
+  const byName = db.prepare('SELECT id FROM investors WHERE first_name = ? AND last_name = ?').get(params.firstName, params.lastName) as { id: string } | undefined;
+  if (byName) {
+    db.prepare(`UPDATE investors SET email = COALESCE(?, email), investor_type = COALESCE(?, investor_type), share_class = COALESCE(?, share_class), drive_folder_id = COALESCE(?, drive_folder_id), source = 'portal' WHERE id = ?`)
+      .run(params.email || null, params.investorType || null, params.shareClass || null, params.driveFolderId || null, byName.id);
+    return;
+  }
+  db.prepare(`INSERT INTO investors (id, first_name, last_name, email, investor_type, share_class, drive_folder_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal')`)
+    .run(crypto.randomUUID(), params.firstName, params.lastName, params.email || null, params.investorType || 'individual', params.shareClass || null, params.driveFolderId || null);
+}
+
+export function updateInvestor(id: string, params: { firstName?: string; lastName?: string; email?: string | null; shareClass?: string | null }) {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: (string | null)[] = [];
+  if (params.firstName !== undefined) { sets.push('first_name = ?'); values.push(params.firstName); }
+  if (params.lastName !== undefined) { sets.push('last_name = ?'); values.push(params.lastName); }
+  if (params.email !== undefined) { sets.push('email = ?'); values.push(params.email); }
+  if (params.shareClass !== undefined) { sets.push('share_class = ?'); values.push(params.shareClass); }
+  if (sets.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE investors SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }

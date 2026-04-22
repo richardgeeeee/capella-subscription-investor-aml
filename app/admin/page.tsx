@@ -27,11 +27,13 @@ interface LinkData {
 }
 
 interface ExistingInvestor {
+  id: string;
   first_name: string;
   last_name: string;
-  investor_name: string;
+  investor_name?: string;
   investor_type: string;
-  investor_email: string | null;
+  email: string | null;
+  investor_email?: string | null;
   share_class: string | null;
   drive_folder_id: string | null;
 }
@@ -124,8 +126,8 @@ export default function AdminDashboard() {
     setSelectedInvestor(inv);
     setNewFirstName(inv.first_name);
     setNewLastName(inv.last_name);
-    setNewEmail(inv.investor_email || '');
-    setNewType(inv.investor_type as 'individual' | 'corporate');
+    setNewEmail(inv.email || inv.investor_email || '');
+    setNewType((inv.investor_type || 'individual') as 'individual' | 'corporate');
     if (inv.share_class) setNewShareClass(inv.share_class as ShareClass);
   };
 
@@ -315,6 +317,7 @@ export default function AdminDashboard() {
             <Link href="/admin/email-templates" className="text-sm text-blue-600 hover:text-blue-800">Email Template</Link>
             <Link href="/admin/contracts" className="text-sm text-blue-600 hover:text-blue-800">Contract Templates</Link>
             <Link href="/admin/class-documents" className="text-sm text-blue-600 hover:text-blue-800">Class Documents</Link>
+            <Link href="/admin/investors" className="text-sm text-blue-600 hover:text-blue-800">Investors</Link>
             <button
               onClick={() => { setShowForm(!showForm); setCreatedUrl(''); setCopied(false); setEmailSent(false); setLinkCategory('new_subscription'); setSelectedInvestor(null); }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
@@ -367,17 +370,16 @@ export default function AdminDashboard() {
                     value={selectedInvestor ? `${selectedInvestor.first_name}|${selectedInvestor.last_name}` : ''}
                     onChange={e => {
                       if (!e.target.value) { setSelectedInvestor(null); setNewFirstName(''); setNewLastName(''); setNewEmail(''); return; }
-                      const [fn, ln] = e.target.value.split('|');
-                      const inv = existingInvestors.find(i => i.first_name === fn && i.last_name === ln);
+                      const inv = existingInvestors.find(i => (i.id || `${i.first_name}|${i.last_name}`) === e.target.value);
                       if (inv) handleSelectInvestor(inv);
                     }}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
                   >
                     <option value="">— Select an investor —</option>
-                    {existingInvestors.map((inv, i) => (
-                      <option key={i} value={`${inv.first_name}|${inv.last_name}`}>
-                        {inv.investor_name} {inv.investor_email ? `(${inv.investor_email})` : ''} {inv.share_class ? `[${inv.share_class}]` : ''}
+                    {existingInvestors.map((inv) => (
+                      <option key={inv.id || `${inv.first_name}|${inv.last_name}`} value={inv.id || `${inv.first_name}|${inv.last_name}`}>
+                        {inv.last_name?.toUpperCase()} {inv.first_name} {inv.email || inv.investor_email ? `(${inv.email || inv.investor_email})` : ''} {inv.share_class ? `[${inv.share_class}]` : ''}
                       </option>
                     ))}
                   </select>
