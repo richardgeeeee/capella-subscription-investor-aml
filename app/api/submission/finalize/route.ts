@@ -8,8 +8,8 @@ import {
   createSubmissionVersion,
   logLinkEvent,
 } from '@/db';
-import { individualFormSchema, corporateFormSchema, amountQualifiesForAssetProofWaiver } from '@/lib/validation';
-import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES } from '@/lib/constants';
+import { individualFormSchema, corporateFormSchema, topupFormSchema, amountQualifiesForAssetProofWaiver } from '@/lib/validation';
+import { INDIVIDUAL_DOCUMENT_TYPES, CORPORATE_DOCUMENT_TYPES, TOPUP_DOCUMENT_TYPES } from '@/lib/constants';
 import { syncSubmissionToGoogleDrive } from '@/lib/google-drive-sync';
 
 export async function POST(request: Request) {
@@ -37,8 +37,13 @@ export async function POST(request: Request) {
   const submission = getOrCreateSubmission(result.link!.id, session.email);
   const formData = JSON.parse(submission.form_data || '{}');
 
+  const linkCategory = result.link!.link_category || 'new_subscription';
+  const isTopup = linkCategory === 'topup';
+
   // Validate form data
-  const schema = result.link!.investor_type === 'individual' ? individualFormSchema : corporateFormSchema;
+  const schema = isTopup
+    ? topupFormSchema
+    : result.link!.investor_type === 'individual' ? individualFormSchema : corporateFormSchema;
   const validation = schema.safeParse(formData);
   if (!validation.success) {
     return NextResponse.json({
@@ -51,12 +56,14 @@ export async function POST(request: Request) {
   const files = getFilesByLinkId(result.link!.id);
   const uploadedTypes = new Set(files.map(f => f.document_type));
 
-  const requiredDocs = result.link!.investor_type === 'individual'
-    ? INDIVIDUAL_DOCUMENT_TYPES
-    : CORPORATE_DOCUMENT_TYPES;
+  const requiredDocs = isTopup
+    ? TOPUP_DOCUMENT_TYPES
+    : result.link!.investor_type === 'individual'
+      ? INDIVIDUAL_DOCUMENT_TYPES
+      : CORPORATE_DOCUMENT_TYPES;
 
   // Individual: liquid_asset_proof is waived when subscription amount > USD 1,000,000
-  const waivesAssetProof = result.link!.investor_type === 'individual'
+  const waivesAssetProof = !isTopup && result.link!.investor_type === 'individual'
     && amountQualifiesForAssetProofWaiver(formData.subscriptionAmount);
 
   const missingDocs: string[] = [];
@@ -66,7 +73,7 @@ export async function POST(request: Request) {
       : doc.required;
     if (!required) continue;
     if ('multiple' in doc && doc.multiple) {
-      if (!files.some(f => f.document_type.startsWith(doc.key))) {
+      if (!files.some(f => f.document_type === doc.key)) {
         missingDocs.push(doc.key);
       }
     } else {

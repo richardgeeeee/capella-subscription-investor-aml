@@ -193,6 +193,11 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE links ADD COLUMN subscription_amount TEXT`);
   }
 
+  // links — link category (new_subscription vs topup)
+  if (!columnExists(db, 'links', 'link_category')) {
+    db.exec(`ALTER TABLE links ADD COLUMN link_category TEXT NOT NULL DEFAULT 'new_subscription'`);
+  }
+
   // share_class_documents — description column
   if (columnExists(db, 'share_class_documents', 'id') && !columnExists(db, 'share_class_documents', 'description')) {
     db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
@@ -256,22 +261,14 @@ export function createLink(params: {
   firstName?: string;
   lastName?: string;
   shareClass?: string;
-  sequenceNumber?: number;
   investorType: 'individual' | 'corporate';
   investorEmail?: string;
   expiresAt: string;
+  linkCategory?: 'new_subscription' | 'topup';
 }) {
   const db = getDb();
-  // If caller provides a sequence number, use it. Otherwise auto-increment
-  // from the current max. This lets the admin jump the sequence to match
-  // pre-existing folders (e.g. legacy manual numbering).
-  let sequenceNumber = params.sequenceNumber;
-  if (!sequenceNumber || sequenceNumber <= 0) {
-    sequenceNumber = suggestNextSequence();
-  }
-
   return db.prepare(`
-    INSERT INTO links (id, token, investor_name, first_name, last_name, share_class, sequence_number, investor_type, investor_email, expires_at)
+    INSERT INTO links (id, token, investor_name, first_name, last_name, share_class, investor_type, investor_email, expires_at, link_category)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     params.id,
@@ -280,10 +277,10 @@ export function createLink(params: {
     params.firstName || null,
     params.lastName || null,
     params.shareClass || null,
-    sequenceNumber,
     params.investorType,
     params.investorEmail?.toLowerCase() || null,
-    params.expiresAt
+    params.expiresAt,
+    params.linkCategory || 'new_subscription'
   );
 }
 
@@ -322,9 +319,10 @@ export function getAllLinks() {
     SELECT l.*,
       (SELECT COUNT(*) FROM submissions s WHERE s.link_id = l.id) as submission_count,
       (SELECT s.status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_status,
-      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status
+      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status,
+      (SELECT COUNT(*) FROM link_events e WHERE e.link_id = l.id AND e.created_at > datetime('now', '-24 hours')) as recent_event_count
     FROM links l ORDER BY l.created_at DESC
-  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null })[];
+  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null; recent_event_count: number })[];
 }
 
 export function revokeLink(id: string) {
@@ -579,7 +577,6 @@ export function setLinkDriveFolderId(linkId: string, folderId: string) {
 export function updateLink(id: string, params: {
   firstName?: string;
   lastName?: string;
-  sequenceNumber?: number;
   shareClass?: string | null;
   investorEmail?: string | null;
   targetSubscriptionDate?: string | null;
@@ -591,7 +588,6 @@ export function updateLink(id: string, params: {
 
   if (params.firstName !== undefined) { sets.push('first_name = ?'); values.push(params.firstName || null); }
   if (params.lastName !== undefined) { sets.push('last_name = ?'); values.push(params.lastName || null); }
-  if (params.sequenceNumber !== undefined) { sets.push('sequence_number = ?'); values.push(params.sequenceNumber); }
   if (params.shareClass !== undefined) { sets.push('share_class = ?'); values.push(params.shareClass || null); }
   if (params.investorEmail !== undefined) {
     sets.push('investor_email = ?');
@@ -615,6 +611,16 @@ export function updateLink(id: string, params: {
 
   values.push(id);
   return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function getDistinctInvestors() {
+  const db = getDb();
+  return db.prepare(`
+    SELECT DISTINCT first_name, last_name, investor_name, investor_type, investor_email, share_class, drive_folder_id
+    FROM links
+    WHERE link_category = 'new_subscription' AND first_name IS NOT NULL AND last_name IS NOT NULL
+    ORDER BY investor_name ASC
+  `).all() as { first_name: string; last_name: string; investor_name: string; investor_type: string; investor_email: string | null; share_class: string | null; drive_folder_id: string | null }[];
 }
 
 // ---- Admin helpers ----
@@ -750,6 +756,7 @@ export interface LinkRow {
   drive_folder_id: string | null;
   target_subscription_date: string | null;
   subscription_amount: string | null;
+  link_category: 'new_subscription' | 'topup';
 }
 
 export interface LinkEventRow {

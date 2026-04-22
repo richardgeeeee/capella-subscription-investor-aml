@@ -190,7 +190,6 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
   // Inline edit state
   const [editing, setEditing] = useState(false);
-  const [editSeq, setEditSeq] = useState('');
   const [editFirst, setEditFirst] = useState('');
   const [editLast, setEditLast] = useState('');
   const [editShareClass, setEditShareClass] = useState('');
@@ -272,7 +271,6 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
   const startEditing = () => {
     if (!link) return;
-    setEditSeq(link.sequence_number ? String(link.sequence_number) : '');
     setEditFirst(link.first_name || '');
     setEditLast(link.last_name || '');
     setEditShareClass(link.share_class || '');
@@ -287,19 +285,12 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     setSaving(true);
     setSaveError(null);
     try {
-      const seq = editSeq ? parseInt(editSeq, 10) : undefined;
-      if (editSeq && (isNaN(seq!) || seq! <= 0)) {
-        setSaveError('Sequence must be a positive integer');
-        setSaving(false);
-        return;
-      }
       const res = await fetch(`/api/admin/links/${linkId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firstName: editFirst,
           lastName: editLast,
-          sequenceNumber: seq,
           shareClass: editShareClass || null,
           investorEmail: editEmail || null,
           targetSubscriptionDate: editTargetDate || null,
@@ -374,10 +365,9 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
   const handleDeleteLink = async () => {
     if (!link) return;
-    const seq = link.sequence_number ? `#${String(link.sequence_number).padStart(3, '0')} ` : '';
     const ok = await confirm({
-      title: `Delete ${seq}${link.investor_name}?`,
-      message: `This permanently removes the link, all submissions, uploaded files, and generated drafts. Sequence ${link.sequence_number ?? ''} will be reused for the next new investor.\n\nThis cannot be undone.`,
+      title: `Delete ${link.investor_name}?`,
+      message: 'This permanently removes the link, all submissions, uploaded files, and generated drafts.\n\nThis cannot be undone.',
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
@@ -460,17 +450,6 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             <div className="space-y-4 mb-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Sequence #</label>
-                  <input
-                    type="number"
-                    value={editSeq}
-                    onChange={e => setEditSeq(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                    placeholder="e.g. 53"
-                    min={1}
-                  />
-                </div>
-                <div>
                   <label className="text-xs text-gray-500 block mb-1">First Name</label>
                   <input
                     type="text"
@@ -552,12 +531,6 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
                 <div>
-                  <p className="text-xs text-gray-500">Sequence</p>
-                  <p className="font-medium text-gray-900">
-                    {link.sequence_number ? String(link.sequence_number).padStart(3, '0') : '-'}
-                  </p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-500">First / Last Name</p>
                   <p className="font-medium text-gray-900">
                     {link.first_name || '?'} / {link.last_name || '?'}
@@ -580,8 +553,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                 <div>
                   <p className="text-xs text-gray-500">Drive Folder</p>
                   <p className="font-medium text-gray-900 text-xs">
-                    {link.sequence_number && link.first_name && link.last_name
-                      ? `${String(link.sequence_number).padStart(3, '0')} ${link.last_name.toUpperCase()} ${link.first_name}`
+                    {link.first_name && link.last_name
+                      ? `${link.last_name.toUpperCase()} ${link.first_name}`
                       : '-'}
                   </p>
                 </div>

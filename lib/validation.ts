@@ -77,8 +77,16 @@ export const corporateFormSchema = subscriptionSchema.merge(paymentSchema).exten
   purposeOfInvestment: z.string().min(1, 'Required'),
 });
 
+export const topupFormSchema = z.object({
+  investorName: z.string().min(1),
+  shareClass: z.string().optional().default(''),
+  subscriptionDate: monthEndDate,
+  subscriptionAmount,
+});
+
 // Draft validation is more lenient - allows empty fields
 export const draftFormSchema = z.record(z.string(), z.unknown());
 
 export type IndividualFormValues = z.infer<typeof individualFormSchema>;
 export type CorporateFormValues = z.infer<typeof corporateFormSchema>;
+export type TopupFormValues = z.infer<typeof topupFormSchema>;

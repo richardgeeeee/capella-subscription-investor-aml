@@ -18,11 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const body = await request.json();
-  const { firstName, lastName, sequenceNumber, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount } = body;
-
-  if (sequenceNumber !== undefined && (!Number.isInteger(sequenceNumber) || sequenceNumber <= 0)) {
-    return NextResponse.json({ error: 'sequenceNumber must be a positive integer' }, { status: 400 });
-  }
+  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount } = body;
 
   if (shareClass !== undefined && shareClass !== null && shareClass !== '' && !SHARE_CLASSES.includes(shareClass)) {
     return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
@@ -43,7 +39,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   updateLink(linkId, {
     firstName: firstName !== undefined ? firstName : undefined,
     lastName: lastName !== undefined ? lastName : undefined,
-    sequenceNumber: sequenceNumber !== undefined ? sequenceNumber : undefined,
     shareClass: shareClass !== undefined ? shareClass : undefined,
     investorEmail: investorEmail !== undefined ? investorEmail : undefined,
     targetSubscriptionDate: targetSubscriptionDate !== undefined ? targetSubscriptionDate : undefined,
@@ -53,7 +48,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   if (firstName !== undefined && firstName !== link.first_name) changes.firstName = { from: link.first_name, to: firstName };
   if (lastName !== undefined && lastName !== link.last_name) changes.lastName = { from: link.last_name, to: lastName };
-  if (sequenceNumber !== undefined && sequenceNumber !== link.sequence_number) changes.sequenceNumber = { from: link.sequence_number, to: sequenceNumber };
   if (shareClass !== undefined && shareClass !== link.share_class) changes.shareClass = { from: link.share_class, to: shareClass };
   if (investorEmail !== undefined && (investorEmail || null) !== link.investor_email) changes.investorEmail = { from: link.investor_email, to: investorEmail };
   if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== link.target_subscription_date) changes.targetSubscriptionDate = { from: link.target_subscription_date, to: targetSubscriptionDate };

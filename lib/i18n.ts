@@ -94,6 +94,15 @@ export const labels: Record<string, { en: string; zh: string }> = {
   personnel_id_card: { en: 'Shareholders/Directors/Signatories - ID Card', zh: '股东/董事/授权签字人身份证' },
   personnel_address_proof: { en: 'Shareholders/Directors/Signatories - Address Proof (within 3 months)', zh: '股东/董事/授权签字人地址证明（最近三个月内）' },
 
+  // -- Document types (top-up) --
+  payment_proof: { en: 'Payment Proof', zh: '付款证明' },
+  section_topup: { en: 'Top-up Subscription', zh: '追加投资' },
+  section_topup_documents: { en: 'Payment Proof Upload', zh: '付款证明上传' },
+  topup_bank_notice: {
+    en: 'Please ensure the remitting bank account is the same as your initial subscription. If using a different account, please contact the fund operations team.',
+    zh: '请确保汇款银行账户与首次认购时使用的账户一致。如使用不同账户，请联系基金运营部门。',
+  },
+
   // -- UI strings --
   submit: { en: 'Submit', zh: '提交' },
   save_draft: { en: 'Saving...', zh: '保存中...' },

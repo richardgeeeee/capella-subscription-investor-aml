@@ -3,6 +3,7 @@ import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
 import { getOrCreateSubmission, getFilesByLinkId, getSubmissionVersions } from '@/db';
 import { InvestorForm } from './_components/InvestorForm';
+import { TopUpForm } from './_components/TopUpForm';
 import { EmailLogin } from './_components/EmailLogin';
 
 export default async function SubmitPage({ params }: { params: Promise<{ token: string }> }) {
@@ -44,6 +45,23 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
   }));
   const versions = getSubmissionVersions(submission.id);
   const latestVersion = versions[0];
+
+  const linkCategory = link.link_category || 'new_subscription';
+
+  if (linkCategory === 'topup') {
+    return (
+      <TopUpForm
+        token={token}
+        investorName={link.investor_name}
+        shareClass={link.share_class}
+        expiresAt={link.expires_at}
+        savedFormData={savedFormData}
+        uploadedFiles={uploadedFiles}
+        submittedVersionCount={versions.length}
+        lastSubmittedAt={latestVersion?.submitted_at || null}
+      />
+    );
+  }
 
   return (
     <InvestorForm

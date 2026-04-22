@@ -34,6 +34,7 @@ const DOC_LABELS: Record<string, string> = {
   personnel_passport_signature: 'Personnel Passport Signature',
   personnel_id_card: 'Personnel ID Card',
   personnel_address_proof: 'Personnel Address proof',
+  payment_proof: 'Payment Proof',
 };
 
 export function getDocLabel(documentType: string): string {
@@ -64,16 +65,13 @@ export function formatDisplayName(
   return `${prefix}-${label}${suffix}${ext}`;
 }
 
-/** "001 ZHANG Jin" — seq, uppercase last name, first name. */
+/** "ZHANG Jin" — uppercase last name, first name. */
 export function formatDriveFolderName(
   firstName: string | null,
   lastName: string | null,
-  fallbackName: string,
-  sequenceNumber: number | null
+  fallbackName: string
 ): string {
-  const seq = String(sequenceNumber || 0).padStart(3, '0');
-  const namePart = firstName && lastName ? `${lastName.toUpperCase()} ${firstName}` : fallbackName;
-  return `${seq} ${namePart}`;
+  return firstName && lastName ? `${lastName.toUpperCase()} ${firstName}` : fallbackName;
 }
 
 /**

@@ -42,6 +42,10 @@ export const CORPORATE_DOCUMENT_TYPES = [
   { key: 'personnel_address_proof', required: true, multiple: true },
 ] as const;
 
+export const TOPUP_DOCUMENT_TYPES = [
+  { key: 'payment_proof', required: true, multiple: true },
+] as const;
+
 export const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'] as const;
 export type ShareClass = typeof SHARE_CLASSES[number];
 

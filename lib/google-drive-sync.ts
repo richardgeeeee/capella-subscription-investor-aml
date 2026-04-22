@@ -99,7 +99,7 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
   }
 
   updateSubmissionSyncStatus(submissionId, 'syncing');
-  const folderName = formatDriveFolderName(link.first_name, link.last_name, link.investor_name, link.sequence_number);
+  const folderName = formatDriveFolderName(link.first_name, link.last_name, link.investor_name);
 
   // Carry the Drive folder id across all uploads. If we already know it, GAS
   // will use that folder directly (and rename it if the name changed). The

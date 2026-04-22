@@ -16,14 +16,10 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { firstName, lastName, shareClass, sequenceNumber, investorType, investorEmail, expiresInDays } = body;
+    const { firstName, lastName, shareClass, investorType, investorEmail, expiresInDays, linkCategory, driveFolderId } = body;
 
     if (!firstName || !lastName || !investorType) {
       return NextResponse.json({ error: 'firstName, lastName, and investorType are required' }, { status: 400 });
-    }
-
-    if (sequenceNumber != null && (!Number.isInteger(sequenceNumber) || sequenceNumber <= 0)) {
-      return NextResponse.json({ error: 'sequenceNumber must be a positive integer' }, { status: 400 });
     }
 
     if (!['individual', 'corporate'].includes(investorType)) {
@@ -33,6 +29,8 @@ export async function POST(request: Request) {
     if (shareClass && !SHARE_CLASSES.includes(shareClass)) {
       return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
     }
+
+    const category = linkCategory === 'topup' ? 'topup' : 'new_subscription';
 
     const investorName = `${firstName.trim()} ${lastName.trim()}`;
     const id = crypto.randomUUID();
@@ -47,11 +45,17 @@ export async function POST(request: Request) {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       shareClass: shareClass || undefined,
-      sequenceNumber: sequenceNumber || undefined,
       investorType,
       investorEmail,
       expiresAt,
+      linkCategory: category,
     });
+
+    // For top-ups linked to an existing investor's Drive folder
+    if (driveFolderId) {
+      const { setLinkDriveFolderId } = await import('@/db');
+      setLinkDriveFolderId(id, driveFolderId);
+    }
 
     const admin = await getAdminSession();
     logLinkEvent(id, 'link_created', { actor: admin?.name || 'Admin' });
