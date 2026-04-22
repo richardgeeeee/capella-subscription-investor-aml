@@ -193,6 +193,11 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE links ADD COLUMN subscription_amount TEXT`);
   }
 
+  // share_class_documents — description column
+  if (columnExists(db, 'share_class_documents', 'id') && !columnExists(db, 'share_class_documents', 'description')) {
+    db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
+  }
+
   // Backfill target_subscription_date and subscription_amount from existing form_data
   const unfilled = db.prepare(`
     SELECT l.id, s.form_data FROM links l
@@ -859,6 +864,7 @@ export interface ShareClassDocumentRow {
   id: string;
   share_class: string;
   name: string;
+  description: string | null;
   file_path: string;
   original_name: string;
   mime_type: string;
@@ -886,6 +892,7 @@ export function createShareClassDocument(params: {
   id: string;
   shareClass: string;
   name: string;
+  description?: string;
   filePath: string;
   originalName: string;
   mimeType: string;
@@ -894,16 +901,17 @@ export function createShareClassDocument(params: {
 }) {
   const db = getDb();
   const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM share_class_documents WHERE share_class = ?').get(params.shareClass) as { next: number };
-  db.prepare(`INSERT INTO share_class_documents (id, share_class, name, file_path, original_name, mime_type, file_size, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    params.id, params.shareClass, params.name, params.filePath, params.originalName, params.mimeType, params.fileSize, params.sortOrder ?? maxOrder.next
+  db.prepare(`INSERT INTO share_class_documents (id, share_class, name, description, file_path, original_name, mime_type, file_size, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    params.id, params.shareClass, params.name, params.description || null, params.filePath, params.originalName, params.mimeType, params.fileSize, params.sortOrder ?? maxOrder.next
   );
 }
 
-export function updateShareClassDocument(id: string, params: { name?: string; sortOrder?: number }) {
+export function updateShareClassDocument(id: string, params: { name?: string; description?: string | null; sortOrder?: number }) {
   const db = getDb();
   const sets: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
   if (params.name !== undefined) { sets.push('name = ?'); values.push(params.name); }
+  if (params.description !== undefined) { sets.push('description = ?'); values.push(params.description); }
   if (params.sortOrder !== undefined) { sets.push('sort_order = ?'); values.push(params.sortOrder); }
   if (sets.length === 0) return;
   values.push(id);

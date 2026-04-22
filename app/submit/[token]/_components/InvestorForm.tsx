@@ -121,7 +121,7 @@ export function InvestorForm({
   const [lastSubmittedAt, setLastSubmittedAt] = useState<string | null>(initialLastSubmittedAt);
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [classDocuments, setClassDocuments] = useState<Array<{ id: string; name: string; originalName: string; mimeType: string; fileSize: number }>>([]);
+  const [classDocuments, setClassDocuments] = useState<Array<{ id: string; name: string; description: string; originalName: string; mimeType: string; fileSize: number }>>([]);
 
   // Fetch share-class documents
   useEffect(() => {
@@ -585,7 +585,8 @@ export function InvestorForm({
                   </svg>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 truncate">{doc.name}</p>
-                    <p className="text-xs text-gray-400">{doc.originalName} · {doc.fileSize < 1024 * 1024 ? `${(doc.fileSize / 1024).toFixed(0)} KB` : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}</p>
+                    {doc.description && <p className="text-xs text-gray-500 truncate">{doc.description}</p>}
+                    <p className="text-xs text-gray-400">{doc.fileSize < 1024 * 1024 ? `${(doc.fileSize / 1024).toFixed(0)} KB` : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}</p>
                   </div>
                   <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

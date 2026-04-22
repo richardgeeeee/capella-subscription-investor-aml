@@ -44,6 +44,7 @@ export async function PATCH(
   const body = await request.json();
   updateShareClassDocument(docId, {
     name: body.name,
+    description: body.description,
     sortOrder: body.sortOrder,
   });
 

@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     documents: docs.map(d => ({
       id: d.id,
       name: d.name,
+      description: d.description || '',
       originalName: d.original_name,
       mimeType: d.mime_type,
       fileSize: d.file_size,

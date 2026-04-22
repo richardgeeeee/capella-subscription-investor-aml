@@ -10,6 +10,7 @@ interface ClassDoc {
   id: string;
   share_class: string;
   name: string;
+  description: string | null;
   original_name: string;
   mime_type: string;
   file_size: number;
@@ -27,8 +28,10 @@ export default function ClassDocumentsPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  const [uploadDesc, setUploadDesc] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
   const [saving, setSaving] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ id: string; name: string; mimeType: string } | null>(null);
 
@@ -60,12 +63,14 @@ export default function ClassDocumentsPage() {
       const fd = new FormData();
       fd.append('shareClass', selectedClass);
       fd.append('name', uploadName);
+      fd.append('description', uploadDesc);
       fd.append('file', uploadFile);
       const res = await fetch('/api/admin/class-documents', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setShowUpload(false);
       setUploadName('');
+      setUploadDesc('');
       setUploadFile(null);
       fetchDocs();
     } catch (err) {
@@ -82,7 +87,7 @@ export default function ClassDocumentsPage() {
       const res = await fetch(`/api/admin/class-documents/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName.trim() }),
+        body: JSON.stringify({ name: editName.trim(), description: editDesc.trim() || null }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       setEditingId(null);
@@ -195,6 +200,16 @@ export default function ClassDocumentsPage() {
                 />
               </div>
               <div>
+                <label className="block text-sm text-gray-600 mb-1">Tagline <span className="text-gray-400">(optional)</span></label>
+                <input
+                  type="text"
+                  value={uploadDesc}
+                  onChange={e => setUploadDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                  placeholder="e.g. Key terms and conditions for subscription"
+                />
+              </div>
+              <div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -279,56 +294,71 @@ export default function ClassDocumentsPage() {
                 {/* Name / edit */}
                 <div className="flex-1 min-w-0">
                   {editingId === doc.id ? (
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          className="flex-1 px-2 py-1 border rounded text-sm text-gray-900"
+                          placeholder="Display name"
+                          autoFocus
+                          onKeyDown={e => { if (e.key === 'Escape') setEditingId(null); }}
+                        />
+                      </div>
                       <input
                         type="text"
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        className="flex-1 px-2 py-1 border rounded text-sm text-gray-900"
-                        autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter') handleRename(doc.id); if (e.key === 'Escape') setEditingId(null); }}
+                        value={editDesc}
+                        onChange={e => setEditDesc(e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-xs text-gray-700"
+                        placeholder="Tagline (optional)"
                       />
-                      <button onClick={() => handleRename(doc.id)} disabled={saving} className="text-xs text-blue-600 hover:text-blue-800">Save</button>
-                      <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleRename(doc.id)} disabled={saving} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingId(null)} className="px-3 py-1 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-50">Cancel</button>
+                      </div>
                     </div>
                   ) : (
                     <>
                       <p className="font-medium text-gray-900 truncate">{doc.name}</p>
-                      <p className="text-xs text-gray-500">{doc.original_name} · {formatSize(doc.file_size)}</p>
+                      {doc.description && <p className="text-xs text-gray-500 truncate">{doc.description}</p>}
+                      <p className="text-xs text-gray-400">{doc.original_name} · {formatSize(doc.file_size)}</p>
                     </>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => { setEditingId(doc.id); setEditName(doc.name); }}
-                    className="text-xs text-gray-600 hover:text-blue-600"
-                  >
-                    Rename
-                  </button>
-                  {doc.mime_type === 'application/pdf' && (
+                {editingId !== doc.id && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
-                      onClick={() => setPreviewFile({ id: doc.id, name: doc.name, mimeType: doc.mime_type })}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      onClick={() => { setEditingId(doc.id); setEditName(doc.name); setEditDesc(doc.description || ''); }}
+                      className="px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors"
                     >
-                      Preview
+                      Edit
                     </button>
-                  )}
-                  <a
-                    href={`/api/admin/class-documents/${doc.id}`}
-                    className="text-xs text-blue-600 hover:text-blue-800"
-                    download
-                  >
-                    Download
-                  </a>
-                  <button
-                    onClick={() => handleDelete(doc)}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Delete
-                  </button>
-                </div>
+                    {doc.mime_type === 'application/pdf' && (
+                      <button
+                        onClick={() => setPreviewFile({ id: doc.id, name: doc.name, mimeType: doc.mime_type })}
+                        className="px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                      >
+                        Preview
+                      </button>
+                    )}
+                    <a
+                      href={`/api/admin/class-documents/${doc.id}`}
+                      download
+                      className="px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                    >
+                      Download
+                    </a>
+                    <button
+                      onClick={() => handleDelete(doc)}
+                      className="px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

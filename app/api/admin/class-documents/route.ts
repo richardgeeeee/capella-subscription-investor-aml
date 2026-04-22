@@ -23,6 +23,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const shareClass = formData.get('shareClass') as string;
   const name = formData.get('name') as string;
+  const description = (formData.get('description') as string) || '';
   const file = formData.get('file') as File;
 
   if (!shareClass || !name || !file) {
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     id,
     shareClass,
     name,
+    description: description || undefined,
     filePath,
     originalName: file.name,
     mimeType: file.type || 'application/octet-stream',
