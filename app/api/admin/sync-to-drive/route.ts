@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifyAdminSession } from '@/lib/admin-auth';
+import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 import { getLinkById, getSubmissionsByLinkId, logLinkEvent } from '@/db';
 import { syncSubmissionToGoogleDrive, isDriveSyncConfigured } from '@/lib/google-drive-sync';
 
@@ -34,13 +34,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No submission found for this link' }, { status: 400 });
   }
 
+  const admin = await getAdminSession();
+  const actor = admin?.name || 'Admin';
+
   try {
     await syncSubmissionToGoogleDrive(submission.id, { force: !!force });
-    logLinkEvent(linkId, 'drive_sync_success', { submissionId: submission.id, force: !!force });
+    logLinkEvent(linkId, 'drive_sync_success', { submissionId: submission.id, force: !!force, actor });
     return NextResponse.json({ success: true, submissionId: submission.id });
   } catch (err) {
     console.error('Failed to sync to Drive:', err);
-    logLinkEvent(linkId, 'drive_sync_failed', { submissionId: submission.id, force: !!force, error: String(err) });
+    logLinkEvent(linkId, 'drive_sync_failed', { submissionId: submission.id, force: !!force, error: String(err), actor });
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

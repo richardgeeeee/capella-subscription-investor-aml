@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { createLink } from '@/db';
+import { createLink, logLinkEvent } from '@/db';
 import { generateToken } from '@/lib/token';
-import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
+import { verifyApiKey, verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 import { DEFAULT_LINK_EXPIRY_DAYS, SHARE_CLASSES } from '@/lib/constants';
 import { formatLinkTag } from '@/lib/file-naming';
 
@@ -52,6 +52,9 @@ export async function POST(request: Request) {
       investorEmail,
       expiresAt,
     });
+
+    const admin = await getAdminSession();
+    logLinkEvent(id, 'link_created', { actor: admin?.name || 'Admin' });
 
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const tag = formatLinkTag(firstName.trim(), lastName.trim());

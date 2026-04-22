@@ -682,6 +682,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               {timeline.map((ev, i) => {
                 const meta = EVENT_META[ev.type] || { label: ev.type, color: 'bg-gray-100 text-gray-700', icon: '•' };
                 const detail = renderEventDetail(ev);
+                const actor = typeof ev.details?.actor === 'string' ? ev.details.actor : null;
                 return (
                   <li key={i} className="ml-4">
                     <span className="absolute -left-[11px] w-5 h-5 rounded-full bg-white border-2 border-gray-300 flex items-center justify-center text-[10px]">
@@ -690,6 +691,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`px-2 py-0.5 text-xs rounded ${meta.color}`}>{meta.label}</span>
                       <span className="text-xs text-gray-500">{parseSqliteTs(ev.at).toLocaleString()}</span>
+                      {actor && <span className="text-xs text-indigo-600 font-medium">by {actor}</span>}
                     </div>
                     {detail && <p className="text-xs text-gray-600 mt-0.5 break-all">{detail}</p>}
                   </li>

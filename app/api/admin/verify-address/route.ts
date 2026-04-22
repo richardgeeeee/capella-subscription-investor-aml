@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { verifyAdminSession } from '@/lib/admin-auth';
+import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 import {
   getLinkById,
   getLatestAddressProofFile,
@@ -53,6 +53,9 @@ export async function POST(request: Request) {
     checked_at: new Date().toISOString(),
   });
 
+  const admin = await getAdminSession();
+  const actor = admin?.name || 'Admin';
+
   try {
     const result = await verifyAddressAgainstDocument(file.stored_path, file.mime_type, userAddress);
     const verification: AddressVerification = {
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
       checked_at: new Date().toISOString(),
     };
     updateAddressVerification(file.id, verification);
-    logLinkEvent(linkId, 'address_verified', { status: verification.status, reason: verification.reason });
+    logLinkEvent(linkId, 'address_verified', { status: verification.status, reason: verification.reason, actor });
     return NextResponse.json({ verification });
   } catch (err) {
     const verification: AddressVerification = {
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
       checked_at: new Date().toISOString(),
     };
     updateAddressVerification(file.id, verification);
-    logLinkEvent(linkId, 'address_verified', { status: 'failed', reason: verification.reason });
+    logLinkEvent(linkId, 'address_verified', { status: 'failed', reason: verification.reason, actor });
     return NextResponse.json({ verification }, { status: 200 });
   }
 }

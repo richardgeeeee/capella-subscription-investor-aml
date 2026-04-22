@@ -60,8 +60,12 @@ export async function GET(request: NextRequest) {
 
   const timeline: TimelineEvent[] = [];
 
-  // Derived: link creation
-  timeline.push({ at: link.created_at, type: 'link_created', details: {} });
+  // Derived: link creation (fallback for links created before event logging)
+  const events = getLinkEvents(linkId);
+  const hasLinkCreatedEvent = events.some(e => e.event_type === 'link_created');
+  if (!hasLinkCreatedEvent) {
+    timeline.push({ at: link.created_at, type: 'link_created', details: {} });
+  }
 
   // Derived: each submission version (investor submission)
   for (const s of submissionsWithVersions) {
@@ -91,7 +95,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Admin/system events from link_events table
-  for (const ev of getLinkEvents(linkId)) {
+  for (const ev of events) {
     // Skip derived types that overlap with auto-populated ones above.
     if (ev.event_type === 'submission_finalized') continue;
     timeline.push({

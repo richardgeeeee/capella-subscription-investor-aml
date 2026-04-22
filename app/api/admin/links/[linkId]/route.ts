@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { verifyAdminSession } from '@/lib/admin-auth';
+import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 import { getLinkById, updateLink, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
@@ -59,7 +59,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== link.target_subscription_date) changes.targetSubscriptionDate = { from: link.target_subscription_date, to: targetSubscriptionDate };
   if (subscriptionAmount !== undefined && subscriptionAmount !== link.subscription_amount) changes.subscriptionAmount = { from: link.subscription_amount, to: subscriptionAmount };
   if (Object.keys(changes).length > 0) {
-    logLinkEvent(linkId, 'admin_edit', { changes });
+    const admin = await getAdminSession();
+    logLinkEvent(linkId, 'admin_edit', { changes, actor: admin?.name || 'Admin' });
   }
 
   return NextResponse.json({ success: true, link: getLinkById(linkId) });
