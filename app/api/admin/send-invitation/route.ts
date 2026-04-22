@@ -26,9 +26,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No email set for this investor' }, { status: 400 });
   }
 
-  const template = getEmailTemplate('investor_invitation');
+  const templateName = link.link_category === 'topup' ? 'topup_invitation' : 'investor_invitation';
+  const template = getEmailTemplate(templateName);
   if (!template) {
-    return NextResponse.json({ error: 'Email template not found' }, { status: 500 });
+    return NextResponse.json({ error: `Email template '${templateName}' not found` }, { status: 500 });
   }
 
   const baseUrl = process.env.BASE_URL || 'http://localhost:3000';

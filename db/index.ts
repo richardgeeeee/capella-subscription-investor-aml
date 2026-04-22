@@ -226,6 +226,30 @@ function runMigrations(db: Database.Database) {
 }
 
 function seedDefaultEmailTemplates(db: Database.Database) {
+  // Top-up invitation template
+  const topupExists = db.prepare('SELECT id FROM email_templates WHERE name = ?').get('topup_invitation');
+  if (!topupExists) {
+    db.prepare(`INSERT INTO email_templates (id, name, subject, body_html) VALUES (?, ?, ?, ?)`).run(
+      crypto.randomUUID(),
+      'topup_invitation',
+      'Capella Alpha Fund - Top-up Subscription / 奕卓資本 - 追加投资',
+      `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2>Capella Alpha Fund / 奕卓資本</h2>
+  <p>Dear {{investorName}},</p>
+  <p>Thank you for your continued investment. To process your top-up subscription, please complete the form below with your subscription details and payment proof.</p>
+  <p>感谢您的持续投资。请通过以下链接填写追加投资信息并上传付款证明。</p>
+  <div style="margin: 20px 0; text-align: center;">
+    <a href="{{link}}" style="background: #7c3aed; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Submit Top-up / 提交追加投资</a>
+  </div>
+  <p style="word-break: break-all; font-size: 12px; color: #666;">{{link}}</p>
+  <p><strong>Important / 重要提醒:</strong> Please ensure the remitting bank account is the same as your initial subscription. If using a different account, please contact the fund operations team.<br/>请确保汇款银行账户与首次认购时使用的账户一致。如使用不同账户，请联系基金运营部门。</p>
+  <p>This link will expire on {{expiresAt}}. / 此链接将于 {{expiresAt}} 过期。</p>
+  <hr style="margin: 20px 0;" />
+  <p style="color: #888; font-size: 12px;">Capella Capital Limited / 奕卓資本有限公司</p>
+</div>`
+    );
+  }
+
   const existing = db.prepare('SELECT id FROM email_templates WHERE name = ?').get('investor_invitation');
   if (!existing) {
     db.prepare(`
