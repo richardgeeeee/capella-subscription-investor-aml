@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAllLinks } from '@/db';
-import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
+import { getAllLinks, getUnseenEventCounts } from '@/db';
+import { verifyApiKey, verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: Request) {
   const isApiKey = verifyApiKey(request);
@@ -10,5 +10,13 @@ export async function GET(request: Request) {
   }
 
   const links = getAllLinks();
-  return NextResponse.json({ links });
+  const admin = await getAdminSession();
+  const unseenCounts = admin ? getUnseenEventCounts(admin.email) : {};
+
+  const enriched = links.map(l => ({
+    ...l,
+    recent_event_count: unseenCounts[l.id] || 0,
+  }));
+
+  return NextResponse.json({ links: enriched });
 }

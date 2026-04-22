@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateToken } from '@/lib/token';
 import { getSessionFromCookie } from '@/lib/session';
-import { createUploadedFile, getOrCreateSubmission, getFilesByLinkId, deleteFileById, getSubmissionVersions } from '@/db';
+import { createUploadedFile, getOrCreateSubmission, getFilesByLinkId, deleteFileById, getSubmissionVersions, getFileById } from '@/db';
 import { MAX_FILE_SIZE, ACCEPTED_MIME_TYPES } from '@/lib/constants';
 import { formatDisplayName } from '@/lib/file-naming';
 
@@ -124,4 +124,30 @@ export async function POST(request: Request) {
     fileSize: file.size,
     triggerAddressVerify: documentType === 'address_proof' && link.investor_type === 'individual',
   });
+}
+
+export async function DELETE(request: Request) {
+  const session = await getSessionFromCookie();
+  if (!session) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  const { fileId } = await request.json();
+  if (!fileId) {
+    return NextResponse.json({ error: 'fileId is required' }, { status: 400 });
+  }
+
+  const file = getFileById(fileId);
+  if (!file || file.link_id !== session.link_id) {
+    return NextResponse.json({ error: 'File not found' }, { status: 404 });
+  }
+
+  try {
+    if (file.stored_path && fs.existsSync(file.stored_path)) {
+      fs.unlinkSync(file.stored_path);
+    }
+  } catch { /* ignore */ }
+  deleteFileById(fileId);
+
+  return NextResponse.json({ success: true });
 }

@@ -251,8 +251,24 @@ export function TopUpForm({
               {paymentProofFiles.map(f => (
                 <div key={f.id} className="flex items-center gap-2 text-sm text-gray-700 bg-green-50 border border-green-200 rounded px-3 py-2">
                   <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  <span className="truncate">{f.originalName}</span>
+                  <span className="truncate flex-1">{f.originalName}</span>
                   <span className="text-xs text-gray-400 flex-shrink-0">{f.fileSize < 1024 * 1024 ? `${(f.fileSize / 1024).toFixed(0)} KB` : `${(f.fileSize / (1024 * 1024)).toFixed(1)} MB`}</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/upload', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ fileId: f.id }),
+                        });
+                        if (res.ok) setUploadedFiles(prev => prev.filter(p => p.id !== f.id));
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-xs text-red-400 hover:text-red-600 flex-shrink-0"
+                  >
+                    删除/Remove
+                  </button>
                 </div>
               ))}
             </div>

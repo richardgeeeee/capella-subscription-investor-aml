@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions, getLinkEvents } from '@/db';
-import { verifyApiKey, verifyAdminSession } from '@/lib/admin-auth';
+import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions, getLinkEvents, markLinkViewed } from '@/db';
+import { verifyApiKey, verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
   const isApiKey = verifyApiKey(request);
@@ -106,6 +106,10 @@ export async function GET(request: NextRequest) {
   }
 
   timeline.sort((a, b) => b.at.localeCompare(a.at));
+
+  // Mark this link as viewed by the current admin
+  const admin = await getAdminSession();
+  if (admin) markLinkViewed(admin.email, linkId);
 
   return NextResponse.json({
     link,

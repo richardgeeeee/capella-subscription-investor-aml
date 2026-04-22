@@ -140,6 +140,12 @@ CREATE TABLE IF NOT EXISTS investors (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_investors_drive_folder ON investors(drive_folder_id);
+CREATE TABLE IF NOT EXISTS link_views (
+    admin_email     TEXT NOT NULL,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    last_viewed_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (admin_email, link_id)
+);
 CREATE TABLE IF NOT EXISTS link_events (
     id              TEXT PRIMARY KEY,
     link_id         TEXT NOT NULL REFERENCES links(id),
@@ -357,10 +363,9 @@ export function getAllLinks() {
     SELECT l.*,
       (SELECT COUNT(*) FROM submissions s WHERE s.link_id = l.id) as submission_count,
       (SELECT s.status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_status,
-      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status,
-      (SELECT COUNT(*) FROM link_events e WHERE e.link_id = l.id AND e.created_at > datetime('now', '-24 hours')) as recent_event_count
+      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status
     FROM links l ORDER BY l.created_at DESC
-  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null; recent_event_count: number })[];
+  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null })[];
 }
 
 export function revokeLink(id: string) {
@@ -987,6 +992,29 @@ export interface SubmissionVersionRow {
   form_data: string;
   file_ids: string;
   submitted_at: string;
+}
+
+// ---- Link view tracking ----
+
+export function markLinkViewed(adminEmail: string, linkId: string) {
+  const db = getDb();
+  db.prepare(`INSERT INTO link_views (admin_email, link_id, last_viewed_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(admin_email, link_id) DO UPDATE SET last_viewed_at = datetime('now')`)
+    .run(adminEmail, linkId);
+}
+
+export function getUnseenEventCounts(adminEmail: string): Record<string, number> {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT e.link_id, COUNT(*) as cnt
+    FROM link_events e
+    LEFT JOIN link_views v ON v.admin_email = ? AND v.link_id = e.link_id
+    WHERE v.last_viewed_at IS NULL OR e.created_at > v.last_viewed_at
+    GROUP BY e.link_id
+  `).all(adminEmail) as { link_id: string; cnt: number }[];
+  const result: Record<string, number> = {};
+  for (const r of rows) result[r.link_id] = r.cnt;
+  return result;
 }
 
 // ---- Investor helpers ----
