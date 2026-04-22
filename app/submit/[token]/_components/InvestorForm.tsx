@@ -121,6 +121,17 @@ export function InvestorForm({
   const [lastSubmittedAt, setLastSubmittedAt] = useState<string | null>(initialLastSubmittedAt);
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [classDocuments, setClassDocuments] = useState<Array<{ id: string; name: string; originalName: string; mimeType: string; fileSize: number }>>([]);
+
+  // Fetch share-class documents
+  useEffect(() => {
+    if (!shareClass) return;
+    fetch(`/api/class-documents?shareClass=${encodeURIComponent(shareClass)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.documents) setClassDocuments(data.documents); })
+      .catch(() => {});
+  }, [shareClass]);
+
   const [addressVerification, setAddressVerification] = useState<{
     status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
     extracted_address: string;
@@ -549,6 +560,41 @@ export function InvestorForm({
         <p className="mt-4 text-center text-sm text-gray-400">
           您可以随时关闭页面，稍后再次登录继续填写。 / You can close this page and log in again later to continue.
         </p>
+
+        {/* Share-class documents for download */}
+        {classDocuments.length > 0 && (
+          <div className="mt-8 pt-6 border-t">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              {lang === 'zh' ? `${shareClass} 相关文件下载` : `${shareClass} Documents`}
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {lang === 'zh'
+                ? '以下文件供您参考和下载。'
+                : 'The following documents are available for your reference.'}
+            </p>
+            <div className="space-y-2">
+              {classDocuments.map(doc => (
+                <a
+                  key={doc.id}
+                  href={`/api/class-documents/${doc.id}`}
+                  download
+                  className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group"
+                >
+                  <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 group-hover:text-blue-700 truncate">{doc.name}</p>
+                    <p className="text-xs text-gray-400">{doc.originalName} · {doc.fileSize < 1024 * 1024 ? `${(doc.fileSize / 1024).toFixed(0)} KB` : `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`}</p>
+                  </div>
+                  <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

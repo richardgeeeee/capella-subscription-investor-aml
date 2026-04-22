@@ -46,6 +46,7 @@ function ContractsContent() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [mappings, setMappings] = useState<Array<{ placeholder: string; formField: string }>>([{ placeholder: '', formField: '' }]);
   const [uploading, setUploading] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ id: string; name: string; type: string } | null>(null);
   const { alert } = useDialog();
 
   const fetchTemplates = useCallback(async () => {
@@ -290,7 +291,7 @@ function ContractsContent() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Format</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">File</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Created</th>
-                  {submissionId && <th className="text-left px-4 py-3 text-gray-600 font-medium">Action</th>}
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -302,28 +303,61 @@ function ContractsContent() {
                     <td className="px-4 py-3 text-gray-600 uppercase">{tpl.file_type}</td>
                     <td className="px-4 py-3 text-gray-500">{tpl.original_name}</td>
                     <td className="px-4 py-3 text-gray-500">{new Date(tpl.created_at).toLocaleDateString()}</td>
-                    {submissionId && (
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleGenerate(tpl.id)}
-                          disabled={generating === tpl.id}
-                          className="text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {tpl.file_type === 'pdf' && (
+                          <button
+                            onClick={() => setPreviewFile({ id: tpl.id, name: tpl.original_name, type: tpl.file_type })}
+                            className="text-blue-600 hover:text-blue-800 text-xs"
+                          >
+                            Preview
+                          </button>
+                        )}
+                        <a
+                          href={`/api/admin/contracts/templates/${tpl.id}`}
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                          download
                         >
-                          {generating === tpl.id ? 'Generating...' : 'Generate'}
-                        </button>
-                      </td>
-                    )}
+                          Download
+                        </a>
+                        {submissionId && (
+                          <button
+                            onClick={() => handleGenerate(tpl.id)}
+                            disabled={generating === tpl.id}
+                            className="text-green-600 hover:text-green-800 text-xs disabled:opacity-50"
+                          >
+                            {generating === tpl.id ? 'Generating...' : 'Generate'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {filteredTemplates.length === 0 && (
                   <tr>
-                    <td colSpan={submissionId ? 7 : 6} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                       No templates found.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Preview modal */}
+        {previewFile && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <span className="font-medium text-gray-900 text-sm truncate">{previewFile.name}</span>
+                <div className="flex items-center gap-2">
+                  <a href={`/api/admin/contracts/templates/${previewFile.id}`} download className="text-sm text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1 rounded">Download</a>
+                  <button onClick={() => setPreviewFile(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                </div>
+              </div>
+              <iframe src={`/api/admin/contracts/templates/${previewFile.id}?inline=1`} className="flex-1 w-full" />
+            </div>
           </div>
         )}
       </div>

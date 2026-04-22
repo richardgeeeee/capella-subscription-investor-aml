@@ -114,6 +114,18 @@ CREATE TABLE IF NOT EXISTS email_templates (
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_links_investor_email ON links(investor_email);
+CREATE TABLE IF NOT EXISTS share_class_documents (
+    id              TEXT PRIMARY KEY,
+    share_class     TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    file_path       TEXT NOT NULL,
+    original_name   TEXT NOT NULL,
+    mime_type       TEXT NOT NULL,
+    file_size       INTEGER NOT NULL,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_share_class_documents_class ON share_class_documents(share_class);
 CREATE TABLE IF NOT EXISTS link_events (
     id              TEXT PRIMARY KEY,
     link_id         TEXT NOT NULL REFERENCES links(id),
@@ -839,6 +851,71 @@ export interface FieldMappingRow {
   placeholder: string;
   form_field: string;
   description: string | null;
+}
+
+// ---- Share-class document helpers ----
+
+export interface ShareClassDocumentRow {
+  id: string;
+  share_class: string;
+  name: string;
+  file_path: string;
+  original_name: string;
+  mime_type: string;
+  file_size: number;
+  sort_order: number;
+  created_at: string;
+}
+
+export function getShareClassDocuments(shareClass: string): ShareClassDocumentRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM share_class_documents WHERE share_class = ? ORDER BY sort_order ASC, created_at ASC').all(shareClass) as ShareClassDocumentRow[];
+}
+
+export function getAllShareClassDocuments(): ShareClassDocumentRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM share_class_documents ORDER BY share_class ASC, sort_order ASC').all() as ShareClassDocumentRow[];
+}
+
+export function getShareClassDocumentById(id: string): ShareClassDocumentRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM share_class_documents WHERE id = ?').get(id) as ShareClassDocumentRow | undefined;
+}
+
+export function createShareClassDocument(params: {
+  id: string;
+  shareClass: string;
+  name: string;
+  filePath: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  sortOrder?: number;
+}) {
+  const db = getDb();
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM share_class_documents WHERE share_class = ?').get(params.shareClass) as { next: number };
+  db.prepare(`INSERT INTO share_class_documents (id, share_class, name, file_path, original_name, mime_type, file_size, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    params.id, params.shareClass, params.name, params.filePath, params.originalName, params.mimeType, params.fileSize, params.sortOrder ?? maxOrder.next
+  );
+}
+
+export function updateShareClassDocument(id: string, params: { name?: string; sortOrder?: number }) {
+  const db = getDb();
+  const sets: string[] = [];
+  const values: (string | number)[] = [];
+  if (params.name !== undefined) { sets.push('name = ?'); values.push(params.name); }
+  if (params.sortOrder !== undefined) { sets.push('sort_order = ?'); values.push(params.sortOrder); }
+  if (sets.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE share_class_documents SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function deleteShareClassDocument(id: string): string | null {
+  const db = getDb();
+  const doc = db.prepare('SELECT file_path FROM share_class_documents WHERE id = ?').get(id) as { file_path: string } | undefined;
+  if (!doc) return null;
+  db.prepare('DELETE FROM share_class_documents WHERE id = ?').run(id);
+  return doc.file_path;
 }
 
 export interface EmailTemplateRow {

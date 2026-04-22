@@ -255,6 +255,9 @@ export default function AdminDashboard() {
             <Link href="/admin/contracts" className="text-sm text-blue-600 hover:text-blue-800">
               Contract Templates
             </Link>
+            <Link href="/admin/class-documents" className="text-sm text-blue-600 hover:text-blue-800">
+              Class Documents
+            </Link>
             <button
               onClick={() => { setShowForm(!showForm); setCreatedUrl(''); setCopied(false); setEmailSent(false); }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
