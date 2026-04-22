@@ -19,9 +19,11 @@ const GAS_API_KEY = process.env.GAS_API_KEY;
 export async function listDriveFolders(): Promise<Array<{ id: string; name: string; url: string }>> {
   if (!GAS_WEB_APP_URL || !GAS_API_KEY) throw new Error('GAS not configured');
   const url = `${GAS_WEB_APP_URL}?apiKey=${encodeURIComponent(GAS_API_KEY)}&action=listFolders`;
-  const res = await fetch(url);
+  const res = await fetch(url, { redirect: 'follow' });
   if (!res.ok) throw new Error(`GAS listFolders failed: ${res.status}`);
-  const data = await res.json();
+  const text = await res.text();
+  if (text.startsWith('<')) throw new Error('GAS returned HTML instead of JSON — redeploy the Apps Script with a new version');
+  const data = JSON.parse(text);
   if (!data.success) throw new Error(data.error || 'GAS listFolders failed');
   return data.folders || [];
 }

@@ -367,7 +367,7 @@ export default function AdminDashboard() {
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Select Existing Investor</label>
                   <select
-                    value={selectedInvestor ? `${selectedInvestor.first_name}|${selectedInvestor.last_name}` : ''}
+                    value={selectedInvestor ? (selectedInvestor.id || `${selectedInvestor.first_name}|${selectedInvestor.last_name}`) : ''}
                     onChange={e => {
                       if (!e.target.value) { setSelectedInvestor(null); setNewFirstName(''); setNewLastName(''); setNewEmail(''); return; }
                       const inv = existingInvestors.find(i => (i.id || `${i.first_name}|${i.last_name}`) === e.target.value);
