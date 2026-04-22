@@ -80,7 +80,7 @@ async function callAnthropic(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 500,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
     }),
@@ -199,13 +199,43 @@ function parseResult(raw: string): AddressVerifyResult {
     .replace(/\s*```$/, '');
   const firstBrace = stripped.indexOf('{');
   const lastBrace = stripped.lastIndexOf('}');
-  const jsonStr = firstBrace >= 0 && lastBrace > firstBrace
+  let jsonStr = firstBrace >= 0 && lastBrace > firstBrace
     ? stripped.slice(firstBrace, lastBrace + 1)
     : stripped;
-  const parsed = JSON.parse(jsonStr);
-  return {
-    match: !!parsed.match,
-    extracted_address: String(parsed.extracted_address || ''),
-    reason: String(parsed.reason || ''),
-  };
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return {
+      match: !!parsed.match,
+      extracted_address: String(parsed.extracted_address || ''),
+      reason: String(parsed.reason || ''),
+    };
+  } catch {
+    // Truncated JSON — try to salvage by closing open strings/braces
+    jsonStr = jsonStr
+      .replace(/,\s*$/, '')       // trailing comma
+      .replace(/"\s*$/, '"}')     // unterminated string value
+      .replace(/:\s*$/, ': ""}'); // key with no value
+    if (!jsonStr.endsWith('}')) jsonStr += '}';
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return {
+        match: !!parsed.match,
+        extracted_address: String(parsed.extracted_address || ''),
+        reason: String(parsed.reason || '(response truncated)'),
+      };
+    } catch {
+      // Last resort: regex extraction
+      const matchVal = /"match"\s*:\s*(true|false)/i.exec(stripped);
+      const addrVal = /"extracted_address"\s*:\s*"([^"]*)/.exec(stripped);
+      if (matchVal) {
+        return {
+          match: matchVal[1] === 'true',
+          extracted_address: addrVal?.[1] || '',
+          reason: '(parsed from truncated response)',
+        };
+      }
+      throw new Error(`Failed to parse model response: ${stripped.slice(0, 200)}`);
+    }
+  }
 }
