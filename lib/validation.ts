@@ -28,11 +28,8 @@ function parseAmount(raw: string): number {
 
 const subscriptionAmount = z.string().min(1, 'Required').refine((value) => {
   const n = parseAmount(value);
-  if (isNaN(n)) return false;
-  if (n < 100_000) return false;
-  if (n % 10_000 !== 0) return false;
-  return true;
-}, 'Amount must be at least USD 100,000 and a multiple of USD 10,000');
+  return !isNaN(n) && n >= 100_000;
+}, 'Amount must be at least USD 100,000');
 
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),

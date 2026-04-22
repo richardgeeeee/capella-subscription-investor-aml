@@ -13,8 +13,12 @@ export const labels: Record<string, { en: string; zh: string }> = {
   subscriptionDate: { en: 'Target Subscription Date', zh: '计划认购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
   footnote_subscription_amount: {
-    en: 'Minimum USD 100,000. Must be a multiple of USD 10,000.',
-    zh: '最低申购金额为 10 万美元，且必须为 1 万美元的整数倍。',
+    en: 'Minimum USD 100,000.',
+    zh: '最低申购金额为 10 万美元。',
+  },
+  footnote_wire_fee_warning: {
+    en: 'Note: If the top-up subscription amount is USD 100,000, please add sufficient funds to cover bank wire transfer fees (typically USD 10–15) to ensure the received amount reaches USD 100,000.',
+    zh: '注意：如追加申购金额为 10 万美元，在转账时请增加足够覆盖银行转账费用的金额（通常为 10-15 美元），确保到账金额达到 10 万美元整。',
   },
   footnote_asset_proof_waived: {
     en: 'Subscription amount exceeds USD 1,000,000 — liquid asset proof is not required.',
@@ -141,8 +145,8 @@ export const labels: Record<string, { en: string; zh: string }> = {
     zh: '请说明本次投资的目的（例如：资本增值、资本保值、投资组合多元化、退休规划等）',
   },
   footnote_subscription_date: {
-    en: 'Target subscription date must be the last day of a month and cannot be in the past. NAV calculation will begin on the 1st of the month following the subscription date.',
-    zh: '计划认购日期必须为每月的最后一天，且不能选择过去的日期。NAV 计算将从认购日期所在月末后的下一个月1号开始。',
+    en: 'The subscription window is at the end of each month. NAV calculation will begin on the 1st of the month following the subscription date.',
+    zh: '认购窗口为每个月的月末。NAV 计算将从认购日期所在月末后的下一个月1号开始。',
   },
   footnote_asset_proof: {
     en: 'Required for SFC professional investor qualification. Proof of liquid assets (cash, stocks, bonds, etc.) exceeding HKD 8 million within the last 3 months. Not required if investing HKD 8 million or more.',

@@ -219,6 +219,15 @@ export function TopUpForm({
             required
             footnoteKey="footnote_subscription_amount"
           />
+          {(() => {
+            const raw = formData.subscriptionAmount || '';
+            const n = Number(raw.replace(/[^0-9.]/g, ''));
+            return !isNaN(n) && n === 100_000 ? (
+              <div className="mb-4 p-3 bg-orange-50 border border-orange-300 rounded-lg text-sm text-orange-800 font-medium">
+                {t('footnote_wire_fee_warning', lang)}
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Payment proof */}
