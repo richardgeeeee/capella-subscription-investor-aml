@@ -305,9 +305,9 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-gray-900">Capella KYC Admin</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             {user && (
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 {user.picture && <img src={user.picture} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />}
@@ -453,8 +453,8 @@ export default function AdminDashboard() {
 
         {/* Monthly summary table */}
         {!loading && monthlySummary.length > 0 && (
-          <div className="mb-4 bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="mb-4 bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-2 text-gray-600 font-medium">Month</th>
@@ -525,8 +525,8 @@ export default function AdminDashboard() {
         {loading ? (
           <p className="text-gray-500">Loading...</p>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>

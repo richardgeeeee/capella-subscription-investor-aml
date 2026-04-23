@@ -7,6 +7,12 @@ export const metadata: Metadata = {
   description: "奕卓資本/Capella Alpha Fund - 投资者信息收集系统",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

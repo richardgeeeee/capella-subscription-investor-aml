@@ -614,7 +614,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               </div>
             </>
           )}
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t">
             {!editing && (
               <button
                 onClick={startEditing}
@@ -1034,8 +1034,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                   : av?.status === 'failed' ? 'bg-amber-50 border border-amber-200'
                   : 'bg-gray-50';
                 return (
-                <div key={file.id} className={`flex items-center justify-between p-3 rounded-lg ${rowBg}`}>
-                  <div>
+                <div key={file.id} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg ${rowBg}`}>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900">
                       {file.display_name || file.original_name}
                       {av?.status === 'mismatched' && (
