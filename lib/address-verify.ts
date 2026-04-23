@@ -2,18 +2,16 @@ import './canvas-polyfill';
 import fs from 'fs';
 
 /**
- * Address verification via MiniMax Anthropic-compatible endpoint.
+ * Address verification using two LLM providers:
  *
- * Env vars:
- * - LLM_API_KEY        — required (Token Plan sk-cp- keys supported)
- * - LLM_BASE_URL       — OpenAI-compatible base, e.g. "https://api.minimaxi.com/v1"
- *                         (the Anthropic endpoint is derived as {origin}/anthropic/v1/messages)
- * - LLM_TEXT_MODEL     — model for text (default: "MiniMax-M2.7")
- * - LLM_VISION_MODEL   — model for images (default: "MiniMax-M2.7")
+ * 1. Text (MiniMax): PDF text extraction → MiniMax Anthropic endpoint
+ *    - LLM_API_KEY, LLM_BASE_URL, LLM_TEXT_MODEL
  *
- * Token Plan keys (sk-cp-) only work with the Anthropic-compatible
- * endpoint using x-api-key auth, NOT the OpenAI-compatible endpoint.
- * All calls go through the Anthropic Messages format.
+ * 2. Vision (Gemini): images + scanned PDFs → Gemini OpenAI-compatible endpoint
+ *    - VISION_API_KEY, VISION_BASE_URL, VISION_MODEL
+ *    - Default: Gemini 2.0 Flash via generativelanguage.googleapis.com
+ *
+ * Falls back to text provider for vision if VISION_API_KEY is not set.
  */
 
 function getAnthropicEndpoint(): string {
@@ -63,7 +61,7 @@ export async function verifyAddressAgainstDocument(
   };
 }
 
-// --------------- Anthropic Messages API ---------------
+// --------------- MiniMax Anthropic API (text) ---------------
 
 async function callAnthropic(
   model: string,
@@ -92,10 +90,53 @@ async function callAnthropic(
   }
 
   const result = await response.json();
-  // MiniMax M2.7 returns [{ type: 'thinking', ... }, { type: 'text', text: '...' }]
   const blocks = Array.isArray(result.content) ? result.content : [];
   const textBlock = blocks.find((b: Record<string, unknown>) => b.type === 'text');
   return (textBlock?.text as string) || '';
+}
+
+// --------------- Gemini Vision API (OpenAI-compatible) ---------------
+
+async function callVision(
+  base64: string,
+  mimeType: string,
+  userAddress: string
+): Promise<string> {
+  const apiKey = process.env.VISION_API_KEY;
+  const baseUrl = process.env.VISION_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai';
+  const model = process.env.VISION_MODEL || 'gemini-2.0-flash';
+
+  if (!apiKey) throw new Error('VISION_API_KEY is not configured');
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Vision API error ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const result = await response.json();
+  return result.choices?.[0]?.message?.content || '';
 }
 
 // --------------- Vision path ---------------
@@ -105,19 +146,18 @@ async function verifyImageViaVision(
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
+  // Use dedicated vision provider (Gemini) if configured
+  if (process.env.VISION_API_KEY) {
+    const text = await callVision(base64, mimeType, userAddress);
+    return parseResult(text);
+  }
+
+  // Fallback: try MiniMax Anthropic (may not work with Token Plan)
   const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-
   const text = await callAnthropic(model, [
-    {
-      type: 'image',
-      source: { type: 'base64', media_type: mimeType, data: base64 },
-    },
-    {
-      type: 'text',
-      text: `User-claimed address:\n"""\n${userAddress}\n"""`,
-    },
+    { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+    { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
   ]);
-
   return parseResult(text);
 }
 
@@ -142,36 +182,33 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return verifyPdfText(text, userAddress);
   }
 
-  // No usable text — try sending PDF as document block (Anthropic format)
+  // No usable text — try vision on the PDF
+  // First try Gemini vision with rendered image
+  if (process.env.VISION_API_KEY) {
+    try {
+      const { pdf: pdfToImg } = await import('pdf-to-img');
+      const doc = await pdfToImg(buffer, { scale: 2 });
+      const pageImage = await doc.getPage(1);
+      return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+    } catch (renderErr) {
+      console.warn('[verifyPdf] local render failed, trying document block:', renderErr instanceof Error ? renderErr.message : renderErr);
+    }
+  }
+
+  // Fallback: send PDF as document block to MiniMax
   const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
   try {
     const responseText = await callAnthropic(model, [
-      {
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
-      },
-      {
-        type: 'text',
-        text: `User-claimed address:\n"""\n${userAddress}\n"""`,
-      },
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } },
+      { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
     ]);
     return parseResult(responseText);
   } catch (err) {
-    console.warn('[verifyPdf] document vision failed, trying local render:', err instanceof Error ? err.message : err);
-  }
-
-  // Fallback: render to image
-  try {
-    const { pdf: pdfToImg } = await import('pdf-to-img');
-    const doc = await pdfToImg(buffer, { scale: 2 });
-    const pageImage = await doc.getPage(1);
-    return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
-  } catch (renderErr) {
-    console.warn('[verifyPdf] local PDF render failed:', renderErr instanceof Error ? renderErr.message : renderErr);
+    console.warn('[verifyPdf] document vision failed:', err instanceof Error ? err.message : err);
     return {
       match: false,
       extracted_address: '',
-      reason: `PDF has no extractable text and rendering failed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`,
+      reason: `PDF has no extractable text and vision failed: ${err instanceof Error ? err.message : String(err)}`,
       skipped: true,
     };
   }
@@ -211,11 +248,10 @@ function parseResult(raw: string): AddressVerifyResult {
       reason: String(parsed.reason || ''),
     };
   } catch {
-    // Truncated JSON — try to salvage by closing open strings/braces
     jsonStr = jsonStr
-      .replace(/,\s*$/, '')       // trailing comma
-      .replace(/"\s*$/, '"}')     // unterminated string value
-      .replace(/:\s*$/, ': ""}'); // key with no value
+      .replace(/,\s*$/, '')
+      .replace(/"\s*$/, '"}')
+      .replace(/:\s*$/, ': ""}');
     if (!jsonStr.endsWith('}')) jsonStr += '}';
     try {
       const parsed = JSON.parse(jsonStr);
@@ -225,7 +261,6 @@ function parseResult(raw: string): AddressVerifyResult {
         reason: String(parsed.reason || '(response truncated)'),
       };
     } catch {
-      // Last resort: regex extraction
       const matchVal = /"match"\s*:\s*(true|false)/i.exec(stripped);
       const addrVal = /"extracted_address"\s*:\s*"([^"]*)/.exec(stripped);
       if (matchVal) {
