@@ -82,6 +82,8 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   submission_version:   { label: 'Submission finalized',      color: 'bg-green-100 text-green-700',     icon: '✅' },
   drive_sync_success:   { label: 'Synced to Drive',           color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
   drive_sync_failed:    { label: 'Drive sync failed',         color: 'bg-red-100 text-red-700',         icon: '⚠️' },
+  drive_folder_stale:   { label: 'Drive folder deleted',      color: 'bg-amber-100 text-amber-700',    icon: '⚠️' },
+  drive_folder_resolved:{ label: 'Drive folder reassigned',   color: 'bg-emerald-100 text-emerald-700', icon: '📁' },
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
   address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
 };
@@ -109,6 +111,8 @@ function renderEventDetail(ev: TimelineEvent): string {
       return Object.keys(changes).map(k => `${k}: ${formatVal(changes[k].from)} → ${formatVal(changes[k].to)}`).join('; ');
     }
     case 'address_verified': return `${d.status || '?'}${d.reason ? ' — ' + d.reason : ''}`;
+    case 'drive_folder_stale': return String(d.message || 'Original folder was deleted');
+    case 'drive_folder_resolved': return d.folderId ? `Linked to folder ${d.folderId}` : 'New folder will be created';
     default: return '';
   }
 }
@@ -249,16 +253,36 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, files, submissions]);
 
-  const handleSyncToDrive = async (force = false) => {
+  const [folderConflict, setFolderConflict] = useState<{
+    message: string;
+    expectedName: string;
+    similarFolders: Array<{ id: string; name: string; url: string }>;
+    force: boolean;
+  } | null>(null);
+
+  const handleSyncToDrive = async (force = false, resolvedFolderId?: string) => {
     setSyncing(true);
     setSyncResult(null);
+    setFolderConflict(null);
     try {
       const res = await fetch('/api/admin/sync-to-drive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId, force }),
+        body: JSON.stringify({ linkId, force, resolvedFolderId }),
       });
       const data = await res.json();
+
+      if (data.folderConflict) {
+        setFolderConflict({
+          message: data.message,
+          expectedName: data.expectedName,
+          similarFolders: data.similarFolders || [],
+          force,
+        });
+        setSyncing(false);
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error);
       setSyncResult(force ? 'Force re-sync complete' : 'Successfully synced to Google Drive');
       fetchData();
@@ -649,6 +673,54 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           {resendResult && <p className="mt-2 text-xs text-gray-600">{resendResult}</p>}
           {syncResult && <p className="mt-2 text-xs text-gray-600">{syncResult}</p>}
           {draftResult && <p className="mt-2 text-xs text-gray-600">{draftResult}</p>}
+
+          {/* Folder conflict resolution dialog */}
+          {folderConflict && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+              <div className="flex items-start gap-2 mb-3">
+                <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                <div>
+                  <p className="text-sm font-medium text-amber-800">{folderConflict.message}</p>
+                  <p className="text-xs text-amber-700 mt-1">Expected folder name: <strong>{folderConflict.expectedName}</strong></p>
+                </div>
+              </div>
+
+              {folderConflict.similarFolders.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-gray-700 font-medium mb-2">Similar folders found — choose one to use:</p>
+                  <div className="space-y-1">
+                    {folderConflict.similarFolders.map(f => (
+                      <div key={f.id} className="flex items-center gap-2 bg-white border rounded px-3 py-2">
+                        <span className="text-sm text-gray-900 flex-1">{f.name}</span>
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800" onClick={e => e.stopPropagation()}>Open</a>
+                        <button
+                          onClick={() => handleSyncToDrive(folderConflict.force, f.id)}
+                          className="px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Use this folder
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSyncToDrive(folderConflict.force, '')}
+                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Create new folder ({folderConflict.expectedName})
+                </button>
+                <button
+                  onClick={() => setFolderConflict(null)}
+                  className="px-3 py-1.5 text-xs font-medium border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Activity Log */}
