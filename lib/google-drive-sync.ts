@@ -119,12 +119,28 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
   // links that predate this column.
   const folderCtx: { folderId: string | null } = { folderId: link.drive_folder_id };
   const upload = async (params: { fileName: string; documentType: string; file: File }) => {
-    const result = await uploadFileToGAS({ ...params, folderName, folderId: folderCtx.folderId });
-    if (result?.folderId && result.folderId !== folderCtx.folderId) {
-      folderCtx.folderId = result.folderId;
-      setLinkDriveFolderId(link.id, result.folderId);
+    try {
+      const result = await uploadFileToGAS({ ...params, folderName, folderId: folderCtx.folderId });
+      if (result?.folderId && result.folderId !== folderCtx.folderId) {
+        folderCtx.folderId = result.folderId;
+        setLinkDriveFolderId(link.id, result.folderId);
+      }
+      return result;
+    } catch (err) {
+      // If the stored folder ID is stale (deleted/trashed), clear it and retry without ID
+      if (folderCtx.folderId && String(err).includes('Service error')) {
+        console.warn(`[Drive Sync] Folder ID ${folderCtx.folderId} appears stale, retrying without it`);
+        folderCtx.folderId = null;
+        setLinkDriveFolderId(link.id, '');
+        const result = await uploadFileToGAS({ ...params, folderName, folderId: null });
+        if (result?.folderId) {
+          folderCtx.folderId = result.folderId;
+          setLinkDriveFolderId(link.id, result.folderId);
+        }
+        return result;
+      }
+      throw err;
     }
-    return result;
   };
 
   try {

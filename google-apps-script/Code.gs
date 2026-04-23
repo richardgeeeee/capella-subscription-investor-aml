@@ -87,7 +87,9 @@ function doPost(e) {
     if (folderId) {
       try {
         investorFolder = DriveApp.getFolderById(folderId);
-        if (investorFolder.getName() !== folderName) {
+        if (investorFolder.isTrashed()) {
+          investorFolder = null;
+        } else if (investorFolder.getName() !== folderName) {
           investorFolder.setName(folderName);
         }
       } catch (e) {
