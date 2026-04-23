@@ -624,7 +624,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               </button>
             )}
             <a
-              href={`/submit/${link.token}`}
+              href={`/submit/${link.token}?preview=1`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-600 border px-4 py-2 rounded-lg text-sm hover:bg-gray-50 inline-flex items-center gap-1"
