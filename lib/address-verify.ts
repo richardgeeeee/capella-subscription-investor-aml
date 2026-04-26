@@ -2,16 +2,16 @@ import './canvas-polyfill';
 import fs from 'fs';
 
 /**
- * Address verification using two LLM providers:
+ * Address verification using two paths:
  *
- * 1. Text (MiniMax): PDF text extraction → MiniMax Anthropic endpoint
+ * 1. Text (MiniMax Anthropic): PDF text extraction → MiniMax Anthropic endpoint
  *    - LLM_API_KEY, LLM_BASE_URL, LLM_TEXT_MODEL
  *
- * 2. Vision (Gemini): images + scanned PDFs → Gemini OpenAI-compatible endpoint
- *    - VISION_API_KEY, VISION_BASE_URL, VISION_MODEL
- *    - Default: Gemini 2.0 Flash via generativelanguage.googleapis.com
+ * 2. Vision (MiniMax VLM): images + scanned PDFs → /v1/coding_plan/vlm
+ *    - Uses the same LLM_API_KEY (Token Plan supported)
+ *    - Dedicated endpoint for image understanding
  *
- * Falls back to text provider for vision if VISION_API_KEY is not set.
+ * Optional: separate vision provider (Gemini etc.) via VISION_API_KEY
  */
 
 function getAnthropicEndpoint(): string {
@@ -95,9 +95,42 @@ async function callAnthropic(
   return (textBlock?.text as string) || '';
 }
 
-// --------------- Gemini Vision API (OpenAI-compatible) ---------------
+// --------------- MiniMax VLM API (Token Plan image understanding) ---------------
 
-async function callVision(
+async function callMiniMaxVLM(
+  base64: string,
+  mimeType: string,
+  prompt: string
+): Promise<string> {
+  const base = process.env.LLM_BASE_URL!;
+  const origin = new URL(base).origin;
+  const endpoint = `${origin}/v1/coding_plan/vlm`;
+
+  const imageUrl = `data:${mimeType};base64,${base64}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
+    },
+    body: JSON.stringify({ prompt, image_url: imageUrl }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`VLM API error ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const result = await response.json();
+  const content = result.content || '';
+  if (!content) throw new Error('VLM API returned no content');
+  return content;
+}
+
+// --------------- Optional: external vision provider (Gemini etc.) ---------------
+
+async function callExternalVision(
   base64: string,
   mimeType: string,
   userAddress: string
@@ -146,19 +179,32 @@ async function verifyImageViaVision(
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
-  // Use dedicated vision provider (Gemini) if configured
-  if (process.env.VISION_API_KEY) {
-    const text = await callVision(base64, mimeType, userAddress);
+  const vlmPrompt = `${SYSTEM_PROMPT}\n\nUser-claimed address:\n"""\n${userAddress}\n"""\n\nAnalyze the attached document image and respond with the JSON object.`;
+
+  // Primary: MiniMax VLM endpoint (Token Plan supported)
+  try {
+    const text = await callMiniMaxVLM(base64, mimeType, vlmPrompt);
     return parseResult(text);
+  } catch (err) {
+    console.warn('[vision] MiniMax VLM failed:', err instanceof Error ? err.message : err);
   }
 
-  // Fallback: try MiniMax Anthropic (may not work with Token Plan)
-  const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-  const text = await callAnthropic(model, [
-    { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-    { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
-  ]);
-  return parseResult(text);
+  // Fallback: external vision provider (Gemini etc.) if configured
+  if (process.env.VISION_API_KEY) {
+    try {
+      const text = await callExternalVision(base64, mimeType, userAddress);
+      return parseResult(text);
+    } catch (err) {
+      console.warn('[vision] External vision failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  return {
+    match: false,
+    extracted_address: '',
+    reason: 'Image verification is not available — please upload a PDF version instead.',
+    skipped: true,
+  };
 }
 
 // --------------- PDF path ---------------
@@ -182,20 +228,17 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     return verifyPdfText(text, userAddress);
   }
 
-  // No usable text — try vision on the PDF
-  // First try Gemini vision with rendered image
-  if (process.env.VISION_API_KEY) {
-    try {
-      const { pdf: pdfToImg } = await import('pdf-to-img');
-      const doc = await pdfToImg(buffer, { scale: 2 });
-      const pageImage = await doc.getPage(1);
-      return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
-    } catch (renderErr) {
-      console.warn('[verifyPdf] local render failed, trying document block:', renderErr instanceof Error ? renderErr.message : renderErr);
-    }
+  // No usable text — try rendering PDF to image for VLM
+  try {
+    const { pdf: pdfToImg } = await import('pdf-to-img');
+    const doc = await pdfToImg(buffer, { scale: 2 });
+    const pageImage = await doc.getPage(1);
+    return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
+  } catch (renderErr) {
+    console.warn('[verifyPdf] local render failed, trying document block:', renderErr instanceof Error ? renderErr.message : renderErr);
   }
 
-  // Fallback: send PDF as document block to MiniMax
+  // Fallback: send PDF as document block to MiniMax Anthropic
   const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
   try {
     const responseText = await callAnthropic(model, [
