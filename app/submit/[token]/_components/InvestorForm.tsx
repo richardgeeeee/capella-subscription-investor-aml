@@ -227,7 +227,7 @@ export function InvestorForm({
 
   const handleFileUploaded = useCallback((file: { id: string; originalName: string; fileSize: number; documentType: string }) => {
     setUploadedFiles(prev => {
-      const multipleTypes = docTypes.filter(d => 'multiple' in d && d.multiple).map(d => d.key);
+      const multipleTypes: string[] = docTypes.filter(d => 'multiple' in d && d.multiple).map(d => d.key);
       const isMultiple = multipleTypes.includes(file.documentType) || file.documentType === 'payment_proof';
       if (isMultiple) {
         return [...prev, {
