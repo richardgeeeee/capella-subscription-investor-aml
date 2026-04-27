@@ -132,6 +132,8 @@ export function InvestorForm({
       .catch(() => {});
   }, [shareClass]);
 
+  const [signatureReminderDismissed, setSignatureReminderDismissed] = useState(false);
+
   const [addressVerification, setAddressVerification] = useState<{
     status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
     extracted_address: string;
@@ -225,7 +227,8 @@ export function InvestorForm({
 
   const handleFileUploaded = useCallback((file: { id: string; originalName: string; fileSize: number; documentType: string }) => {
     setUploadedFiles(prev => {
-      const isMultiple = file.documentType.startsWith('personnel_');
+      const multipleTypes = docTypes.filter(d => 'multiple' in d && d.multiple).map(d => d.key);
+      const isMultiple = multipleTypes.includes(file.documentType) || file.documentType === 'payment_proof';
       if (isMultiple) {
         return [...prev, {
           id: file.id,
@@ -249,6 +252,12 @@ export function InvestorForm({
         },
       ];
     });
+
+    // Show signature reminder after uploading ID documents
+    const idDocTypes = ['passport_front', 'passport_signature', 'id_card'];
+    if (idDocTypes.includes(file.documentType)) {
+      setSignatureReminderDismissed(false);
+    }
 
     // Verify address immediately after address_proof upload
     if (investorType === 'individual' && file.documentType === 'address_proof') {
@@ -427,6 +436,32 @@ export function InvestorForm({
           <h2 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
             {t('section_documents', lang)}
           </h2>
+
+          {/* Signature requirement notice */}
+          <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-lg text-sm text-red-800 font-semibold">
+            {t('notice_id_signature_required', lang)}
+          </div>
+
+          {/* Multiple files hint */}
+          <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+            {t('footnote_id_multiple_files', lang)}
+          </div>
+
+          {/* Signature reminder after uploading ID docs */}
+          {!signatureReminderDismissed && uploadedFiles.some(f => ['passport_front', 'passport_signature', 'id_card'].includes(f.documentType)) && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                <span>{t('notice_id_signature_reminder', lang)}</span>
+              </div>
+              <button
+                onClick={() => setSignatureReminderDismissed(true)}
+                className="flex-shrink-0 px-3 py-1 bg-amber-200 text-amber-900 rounded text-xs font-medium hover:bg-amber-300 transition-colors"
+              >
+                {t('notice_acknowledged', lang)}
+              </button>
+            </div>
+          )}
 
           {investorType === 'individual' && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">

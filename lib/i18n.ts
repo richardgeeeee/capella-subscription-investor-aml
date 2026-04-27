@@ -104,6 +104,21 @@ export const labels: Record<string, { en: string; zh: string }> = {
 
   // -- Document types (top-up) --
   payment_proof: { en: 'Payment Proof', zh: '付款证明' },
+
+  // -- ID document notices --
+  footnote_id_multiple_files: {
+    en: 'If you have multiple files (e.g. scanned copy, signed copy, Certified True Copy), please upload them one by one.',
+    zh: '如有多份文件（如扫描件、含签名的扫描件、Certified True Copy），请依次上传。',
+  },
+  notice_id_signature_required: {
+    en: 'Important: All identity document copies must bear your signature. The signature must match the one on the Client Agreement and Subscription Agreement.',
+    zh: '重要提示：所有身份证明文件的复印件需要附上签字，签字须与客户合同和认购合同上的签字相匹配。',
+  },
+  notice_id_signature_reminder: {
+    en: 'Reminder: Please make sure your uploaded identity documents include your signature, and that it matches the signature on the Client Agreement and Subscription Agreement.',
+    zh: '提醒：请确保上传的身份证明文件上附有您的签字，且签字须与客户合同和认购合同上的签字一致。',
+  },
+  notice_acknowledged: { en: 'Acknowledged', zh: '已知晓' },
   section_topup: { en: 'Top-up Subscription', zh: '追加投资' },
   section_topup_documents: { en: 'Payment Proof Upload', zh: '付款证明上传' },
   topup_bank_notice: {
