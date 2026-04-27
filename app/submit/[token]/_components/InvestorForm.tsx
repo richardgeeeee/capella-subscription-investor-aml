@@ -557,32 +557,40 @@ export function InvestorForm({
               </div>
             );
           })}
+        </div>
 
-          {/* Payment proof (optional, multiple) */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <FileDropzone
-              token={token}
-              documentType="payment_proof"
-              label={t('payment_proof', lang) + ` (${lang === 'zh' ? '选填' : 'Optional'})`}
-              required={false}
-              onUploaded={handleFileUploaded}
-              multiple
-            />
-            {(() => {
-              const ppFiles = uploadedFiles.filter(f => f.documentType === 'payment_proof');
-              return ppFiles.length > 0 ? (
-                <div className="mt-2 space-y-1">
-                  {ppFiles.map(f => (
-                    <div key={f.id} className="flex items-center gap-2 text-sm text-gray-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-                      <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      <span className="truncate flex-1">{f.originalName}</span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{f.fileSize < 1024 * 1024 ? `${(f.fileSize / 1024).toFixed(0)} KB` : `${(f.fileSize / (1024 * 1024)).toFixed(1)} MB`}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null;
-            })()}
-          </div>
+        {/* Payment Proof — separate section */}
+        <div className="mb-8 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-indigo-900 mb-1">
+            {lang === 'zh' ? '转账证明' : 'Payment Proof'}
+          </h2>
+          <p className="text-sm text-indigo-600 mb-4">
+            {lang === 'zh'
+              ? '请在完成转账后上传转账证明。您可以随时回到本页面上传，无需等到首次提交。'
+              : 'Please upload your payment proof after completing the wire transfer. You can return to this page anytime — no need to wait for the initial submission.'}
+          </p>
+          <FileDropzone
+            token={token}
+            documentType="payment_proof"
+            label={t('payment_proof', lang)}
+            required={false}
+            onUploaded={handleFileUploaded}
+            multiple
+          />
+          {(() => {
+            const ppFiles = uploadedFiles.filter(f => f.documentType === 'payment_proof');
+            return ppFiles.length > 0 ? (
+              <div className="mt-3 space-y-1">
+                {ppFiles.map(f => (
+                  <div key={f.id} className="flex items-center gap-2 text-sm text-gray-700 bg-white border border-indigo-200 rounded px-3 py-2">
+                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    <span className="truncate flex-1">{f.originalName}</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{f.fileSize < 1024 * 1024 ? `${(f.fileSize / 1024).toFixed(0)} KB` : `${(f.fileSize / (1024 * 1024)).toFixed(1)} MB`}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Submit */}
