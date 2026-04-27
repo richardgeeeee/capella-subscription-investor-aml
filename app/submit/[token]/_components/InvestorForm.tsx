@@ -463,17 +463,6 @@ export function InvestorForm({
             </div>
           )}
 
-          {investorType === 'individual' && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-              {t('footnote_asset_proof', lang)}
-            </div>
-          )}
-          {investorType === 'individual' && waivesAssetProof && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-              {t('footnote_asset_proof_waived', lang)}
-            </div>
-          )}
-
           {/* Address verification banner */}
           {investorType === 'individual' && addressVerification && (
             <div className={`mb-4 p-3 border rounded-lg text-sm ${
@@ -537,11 +526,21 @@ export function InvestorForm({
           {docTypes.map((doc) => {
             const existingFile = uploadedFiles.find(f => f.documentType === doc.key);
             const isMultiple = 'multiple' in doc && doc.multiple;
-            // liquid_asset_proof is waived if subscription amount > USD 1M
             const isAssetProof = doc.key === 'liquid_asset_proof';
             const required = isAssetProof && waivesAssetProof ? false : doc.required;
             return (
-              <FileDropzone
+              <div key={doc.key}>
+                {isAssetProof && investorType === 'individual' && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    {t('footnote_asset_proof', lang)}
+                  </div>
+                )}
+                {isAssetProof && investorType === 'individual' && waivesAssetProof && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                    {t('footnote_asset_proof_waived', lang)}
+                  </div>
+                )}
+                <FileDropzone
                 key={doc.key}
                 token={token}
                 documentType={doc.key}
@@ -555,6 +554,7 @@ export function InvestorForm({
                 onUploaded={handleFileUploaded}
                 multiple={isMultiple}
               />
+              </div>
             );
           })}
 
