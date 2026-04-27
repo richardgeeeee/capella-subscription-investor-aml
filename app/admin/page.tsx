@@ -305,22 +305,23 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-bold text-gray-900">Capella KYC Admin</h1>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
             {user && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="flex items-center gap-1.5 text-sm text-gray-500 mr-2">
                 {user.picture && <img src={user.picture} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />}
                 <span>{user.name}</span>
               </div>
             )}
-            <Link href="/admin/email-templates" className="text-sm text-blue-600 hover:text-blue-800">Email Template</Link>
-            <Link href="/admin/contracts" className="text-sm text-blue-600 hover:text-blue-800">Contract Templates</Link>
-            <Link href="/admin/class-documents" className="text-sm text-blue-600 hover:text-blue-800">Class Documents</Link>
-            <Link href="/admin/investors" className="text-sm text-blue-600 hover:text-blue-800">Investors</Link>
+            <Link href="/admin/email-templates" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Email</Link>
+            <Link href="/admin/contracts" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Contracts</Link>
+            <Link href="/admin/class-documents" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Class Docs</Link>
+            <Link href="/admin/investors" className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">Investors</Link>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
               onClick={() => { setShowForm(!showForm); setCreatedUrl(''); setCopied(false); setEmailSent(false); setLinkCategory('new_subscription'); setSelectedInvestor(null); }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-xs font-medium hover:bg-blue-700"
             >
               + New Link
             </button>
@@ -329,7 +330,7 @@ export default function AdminDashboard() {
                 await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) });
                 window.location.href = '/admin/login';
               }}
-              className="text-sm text-gray-400 hover:text-gray-600"
+              className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600"
             >
               Logout
             </button>
