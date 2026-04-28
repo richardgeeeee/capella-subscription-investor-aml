@@ -243,6 +243,24 @@ function runMigrations(db: Database.Database) {
       if (d || a) backfill.run(d, a, row.id);
     } catch { /* skip malformed JSON */ }
   }
+
+  // Deduplicate investors table on every startup
+  try {
+    const invAll = db.prepare('SELECT * FROM investors ORDER BY drive_folder_id DESC, email DESC, created_at ASC').all() as { id: string; first_name: string; last_name: string; drive_folder_id: string | null; drive_folder_name: string | null; drive_folder_url: string | null; email: string | null; share_class: string | null }[];
+    const seen = new Map<string, string>();
+    for (const inv of invAll) {
+      const key = `${inv.first_name.toLowerCase()}|${inv.last_name.toLowerCase()}`;
+      if (seen.has(key)) {
+        const keepId = seen.get(key)!;
+        if (inv.drive_folder_id) db.prepare('UPDATE investors SET drive_folder_id = COALESCE(drive_folder_id, ?), drive_folder_name = COALESCE(drive_folder_name, ?), drive_folder_url = COALESCE(drive_folder_url, ?) WHERE id = ?').run(inv.drive_folder_id, inv.drive_folder_name, inv.drive_folder_url, keepId);
+        if (inv.email) db.prepare('UPDATE investors SET email = COALESCE(email, ?) WHERE id = ?').run(inv.email, keepId);
+        if (inv.share_class) db.prepare('UPDATE investors SET share_class = COALESCE(share_class, ?) WHERE id = ?').run(inv.share_class, keepId);
+        db.prepare('DELETE FROM investors WHERE id = ?').run(inv.id);
+      } else {
+        seen.set(key, inv.id);
+      }
+    }
+  } catch { /* investors table may not exist yet */ }
 }
 
 function seedDefaultEmailTemplates(db: Database.Database) {
