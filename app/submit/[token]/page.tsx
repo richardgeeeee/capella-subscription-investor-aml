@@ -88,6 +88,7 @@ export default async function SubmitPage({ params, searchParams }: { params: Pro
       investorName={link.investor_name}
       investorType={link.investor_type}
       shareClass={link.share_class}
+      investorEmail={link.investor_email}
       expiresAt={link.expires_at}
       savedFormData={savedFormData}
       uploadedFiles={uploadedFiles}

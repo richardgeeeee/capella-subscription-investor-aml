@@ -15,6 +15,7 @@ interface InvestorFormProps {
   investorName: string;
   investorType: InvestorType;
   shareClass: string | null;
+  investorEmail: string | null;
   expiresAt: string;
   savedFormData: Record<string, string>;
   uploadedFiles: UploadedFileInfo[];
@@ -51,7 +52,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'identificationNumber', required: true },
     { key: 'residentialAddress', required: true },
     { key: 'phoneNumber', required: true },
-    { key: 'emailAddress', type: 'email', required: true },
+    { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds' },
     { key: 'employmentHistory', type: 'employment_history' },
@@ -81,7 +82,7 @@ const CORPORATE_FIELDS: SectionDef[] = [
     { key: 'natureOfBusiness', required: true },
     { key: 'address', required: true },
     { key: 'phoneNumber', required: true },
-    { key: 'emailAddress', type: 'email', required: true },
+    { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds_corporate' },
     { key: 'purposeOfInvestment', required: true, footnoteKey: 'footnote_purpose_of_investment' },
@@ -100,6 +101,7 @@ export function InvestorForm({
   investorName,
   investorType,
   shareClass,
+  investorEmail,
   expiresAt,
   savedFormData,
   uploadedFiles: initialUploadedFiles,
@@ -109,9 +111,9 @@ export function InvestorForm({
   const [lang, setLang] = useState<Language>('zh');
   const [formData, setFormData] = useState<Record<string, string>>(() => ({
     ...savedFormData,
-    // Override with admin-set values (immutable on client)
     investorName,
     shareClass: shareClass || '',
+    emailAddress: investorEmail || savedFormData.emailAddress || '',
   }));
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>(initialUploadedFiles);
   const [saving, setSaving] = useState(false);
