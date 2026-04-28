@@ -662,9 +662,10 @@ export function updateLink(id: string, params: {
 export function getDistinctInvestors() {
   const db = getDb();
   return db.prepare(`
-    SELECT DISTINCT first_name, last_name, investor_name, investor_type, investor_email, share_class, drive_folder_id
+    SELECT first_name, last_name, investor_name, investor_type, investor_email, share_class, drive_folder_id
     FROM links
     WHERE link_category = 'new_subscription' AND first_name IS NOT NULL AND last_name IS NOT NULL
+    GROUP BY LOWER(first_name), LOWER(last_name)
     ORDER BY investor_name ASC
   `).all() as { first_name: string; last_name: string; investor_name: string; investor_type: string; investor_email: string | null; share_class: string | null; drive_folder_id: string | null }[];
 }
@@ -1059,14 +1060,22 @@ export function upsertInvestorFromDrive(params: {
   lastName: string;
 }) {
   const db = getDb();
-  const existing = db.prepare('SELECT id FROM investors WHERE drive_folder_id = ?').get(params.driveFolderId) as { id: string } | undefined;
-  if (existing) {
+  // Match by drive_folder_id first
+  const byId = db.prepare('SELECT id FROM investors WHERE drive_folder_id = ?').get(params.driveFolderId) as { id: string } | undefined;
+  if (byId) {
     db.prepare(`UPDATE investors SET drive_folder_name = ?, drive_folder_url = ? WHERE id = ?`)
-      .run(params.driveFolderName, params.driveFolderUrl, existing.id);
-  } else {
-    db.prepare(`INSERT INTO investors (id, first_name, last_name, drive_folder_id, drive_folder_name, drive_folder_url, source) VALUES (?, ?, ?, ?, ?, ?, 'drive')`)
-      .run(crypto.randomUUID(), params.firstName, params.lastName, params.driveFolderId, params.driveFolderName, params.driveFolderUrl);
+      .run(params.driveFolderName, params.driveFolderUrl, byId.id);
+    return;
   }
+  // Match by name (case-insensitive) — merge instead of creating duplicate
+  const byName = db.prepare('SELECT id FROM investors WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?) AND drive_folder_id IS NULL').get(params.firstName, params.lastName) as { id: string } | undefined;
+  if (byName) {
+    db.prepare(`UPDATE investors SET drive_folder_id = ?, drive_folder_name = ?, drive_folder_url = ? WHERE id = ?`)
+      .run(params.driveFolderId, params.driveFolderName, params.driveFolderUrl, byName.id);
+    return;
+  }
+  db.prepare(`INSERT INTO investors (id, first_name, last_name, drive_folder_id, drive_folder_name, drive_folder_url, source) VALUES (?, ?, ?, ?, ?, ?, 'drive')`)
+    .run(crypto.randomUUID(), params.firstName, params.lastName, params.driveFolderId, params.driveFolderName, params.driveFolderUrl);
 }
 
 export function upsertInvestorFromPortal(params: {
@@ -1086,7 +1095,7 @@ export function upsertInvestorFromPortal(params: {
       return;
     }
   }
-  const byName = db.prepare('SELECT id FROM investors WHERE first_name = ? AND last_name = ?').get(params.firstName, params.lastName) as { id: string } | undefined;
+  const byName = db.prepare('SELECT id FROM investors WHERE LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)').get(params.firstName, params.lastName) as { id: string } | undefined;
   if (byName) {
     db.prepare(`UPDATE investors SET email = COALESCE(?, email), investor_type = COALESCE(?, investor_type), share_class = COALESCE(?, share_class), drive_folder_id = COALESCE(?, drive_folder_id), source = 'portal' WHERE id = ?`)
       .run(params.email || null, params.investorType || null, params.shareClass || null, params.driveFolderId || null, byName.id);
@@ -1094,6 +1103,37 @@ export function upsertInvestorFromPortal(params: {
   }
   db.prepare(`INSERT INTO investors (id, first_name, last_name, email, investor_type, share_class, drive_folder_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, 'portal')`)
     .run(crypto.randomUUID(), params.firstName, params.lastName, params.email || null, params.investorType || 'individual', params.shareClass || null, params.driveFolderId || null);
+}
+
+export function deduplicateInvestors() {
+  const db = getDb();
+  const all = db.prepare('SELECT * FROM investors ORDER BY drive_folder_id DESC, email DESC, created_at ASC').all() as InvestorRow[];
+  const seen = new Map<string, string>();
+  const toDelete: string[] = [];
+  for (const inv of all) {
+    const key = `${inv.first_name.toLowerCase()}|${inv.last_name.toLowerCase()}`;
+    if (seen.has(key)) {
+      const keepId = seen.get(key)!;
+      // Merge useful data into the kept record
+      if (inv.drive_folder_id) {
+        db.prepare('UPDATE investors SET drive_folder_id = COALESCE(drive_folder_id, ?), drive_folder_name = COALESCE(drive_folder_name, ?), drive_folder_url = COALESCE(drive_folder_url, ?) WHERE id = ?')
+          .run(inv.drive_folder_id, inv.drive_folder_name, inv.drive_folder_url, keepId);
+      }
+      if (inv.email) {
+        db.prepare('UPDATE investors SET email = COALESCE(email, ?) WHERE id = ?').run(inv.email, keepId);
+      }
+      if (inv.share_class) {
+        db.prepare('UPDATE investors SET share_class = COALESCE(share_class, ?) WHERE id = ?').run(inv.share_class, keepId);
+      }
+      toDelete.push(inv.id);
+    } else {
+      seen.set(key, inv.id);
+    }
+  }
+  for (const id of toDelete) {
+    db.prepare('DELETE FROM investors WHERE id = ?').run(id);
+  }
+  return toDelete.length;
 }
 
 export function updateInvestor(id: string, params: { firstName?: string; lastName?: string; email?: string | null; shareClass?: string | null }) {

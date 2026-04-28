@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
-import { getAllInvestors, upsertInvestorFromDrive, upsertInvestorFromPortal, getDistinctInvestors } from '@/db';
+import { getAllInvestors, upsertInvestorFromDrive, upsertInvestorFromPortal, getDistinctInvestors, deduplicateInvestors } from '@/db';
 import { listDriveFolders, isDriveSyncConfigured } from '@/lib/google-drive-sync';
 
 function parseFolderName(name: string): { firstName: string; lastName: string } {
@@ -67,8 +67,9 @@ export async function POST(request: Request) {
       });
     }
 
+    const deduped = deduplicateInvestors();
     const admin = await getAdminSession();
-    return NextResponse.json({ success: true, synced, actor: admin?.name });
+    return NextResponse.json({ success: true, synced, deduped, actor: admin?.name });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
