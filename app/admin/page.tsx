@@ -23,6 +23,7 @@ interface LinkData {
   target_subscription_date: string | null;
   subscription_amount: string | null;
   link_category: string;
+  payment_proof_count: number;
   recent_event_count: number;
 }
 
@@ -527,7 +528,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Loading...</p>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-sm min-w-[800px]">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
@@ -536,6 +537,7 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('target_subscription_date')}>Target Date{sortIcon('target_subscription_date')}</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('subscription_amount')}>Amount{sortIcon('subscription_amount')}</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Payment</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('created_at')}>Created{sortIcon('created_at')}</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
@@ -570,6 +572,11 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{link.target_subscription_date || '-'}</td>
                       <td className="px-4 py-3 text-right text-gray-600 text-xs whitespace-nowrap">{link.subscription_amount ? `$${parseAmount(link.subscription_amount).toLocaleString()}` : '-'}</td>
                       <td className="px-4 py-3">{getStatusBadge(link)}</td>
+                      <td className="px-4 py-3">
+                        {(link.payment_proof_count || 0) > 0
+                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">Uploaded</span>
+                          : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
+                      </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{new Date(link.created_at).toLocaleDateString()}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
@@ -596,7 +603,7 @@ export default function AdminDashboard() {
                 })}
                 {filteredLinks.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       {links.length === 0 ? 'No investor links yet.' : 'No matches for current filters.'}
                     </td>
                   </tr>

@@ -363,9 +363,10 @@ export function getAllLinks() {
     SELECT l.*,
       (SELECT COUNT(*) FROM submissions s WHERE s.link_id = l.id) as submission_count,
       (SELECT s.status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_status,
-      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status
+      (SELECT s.drive_sync_status FROM submissions s WHERE s.link_id = l.id ORDER BY s.updated_at DESC LIMIT 1) as latest_sync_status,
+      (SELECT COUNT(*) FROM uploaded_files uf WHERE uf.link_id = l.id AND uf.document_type = 'payment_proof') as payment_proof_count
     FROM links l ORDER BY l.created_at DESC
-  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null })[];
+  `).all() as (LinkRow & { submission_count: number; latest_status: string | null; latest_sync_status: string | null; payment_proof_count: number })[];
 }
 
 export function revokeLink(id: string) {
