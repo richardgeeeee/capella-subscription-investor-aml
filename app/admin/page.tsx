@@ -574,7 +574,7 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3">{getStatusBadge(link)}</td>
                       <td className="px-4 py-3">
                         {(link.payment_proof_count || 0) > 0
-                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">Uploaded</span>
+                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">Uploaded {link.payment_proof_count}</span>
                           : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{new Date(link.created_at).toLocaleDateString()}</td>
