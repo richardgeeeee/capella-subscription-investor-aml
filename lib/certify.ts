@@ -2,7 +2,8 @@ import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFImage, type PDFP
 import fs from 'fs';
 import path from 'path';
 
-const CERT_TEXT = 'I hereby certify that this photo is of true likeness and complete copy of the original';
+const CERT_TEXT_DEFAULT = 'I hereby certify that this photo is of true likeness and complete copy of the original';
+const CERT_TEXT_IDENTITY = 'I hereby certify that this photo is of true likeness and complete copy of the original and the bearer of the document has signed in my presence';
 
 const CERT_INFO_LINES = [
   'Ran MA',
@@ -31,8 +32,8 @@ const IDENTITY_DOC_TYPES = new Set([
   'personnel_id_card',
 ]);
 
-export function isCertifiableDocType(docType: string): boolean {
-  return !IDENTITY_DOC_TYPES.has(docType);
+export function isIdentityDocType(docType: string): boolean {
+  return IDENTITY_DOC_TYPES.has(docType);
 }
 
 function getAssetsDir(): string {
@@ -58,7 +59,8 @@ async function loadSignature(doc: PDFDocument): Promise<PDFImage | null> {
 export async function generateCertifiedPdf(
   storedPath: string,
   mimeType: string,
-  certDate: Date
+  certDate: Date,
+  documentType?: string
 ): Promise<Buffer> {
   if (!fs.existsSync(storedPath)) {
     throw new Error('Source file not found on disk');
@@ -105,8 +107,9 @@ export async function generateCertifiedPdf(
   }
 
   const dateText = formatCertDate(certDate);
+  const certText = documentType && isIdentityDocType(documentType) ? CERT_TEXT_IDENTITY : CERT_TEXT_DEFAULT;
   for (const page of outputPdf.getPages()) {
-    addCertificationStamp(page, { font, fontBold, fontItalic, signatureImage, dateText });
+    addCertificationStamp(page, { font, fontBold, fontItalic, signatureImage, dateText, certText });
   }
 
   return Buffer.from(await outputPdf.save());
@@ -142,10 +145,11 @@ function addCertificationStamp(
     fontItalic: PDFFont;
     signatureImage: PDFImage | null;
     dateText: string;
+    certText: string;
   }
 ) {
   const { width } = page.getSize();
-  const { font, fontBold, fontItalic, signatureImage, dateText } = opts;
+  const { font, fontBold, fontItalic, signatureImage, dateText, certText } = opts;
 
   const stampBottom = 15;
   const stampTop = stampBottom + STAMP_HEIGHT;
@@ -158,16 +162,38 @@ function addCertificationStamp(
     color: rgb(0.4, 0.4, 0.4),
   });
 
-  // Certification text (centered, italic)
+  // Certification text (italic, may wrap for longer identity text)
+  const margin = 40;
+  const maxTextWidth = width - margin * 2;
   const certTextSize = 8.5;
-  const certTextWidth = fontItalic.widthOfTextAtSize(CERT_TEXT, certTextSize);
-  page.drawText(CERT_TEXT, {
-    x: (width - certTextWidth) / 2,
-    y: stampTop - 18,
-    size: certTextSize,
-    font: fontItalic,
-    color: rgb(0, 0, 0),
-  });
+  const textWidth = fontItalic.widthOfTextAtSize(certText, certTextSize);
+
+  if (textWidth <= maxTextWidth) {
+    page.drawText(certText, {
+      x: (width - textWidth) / 2,
+      y: stampTop - 18,
+      size: certTextSize,
+      font: fontItalic,
+      color: rgb(0, 0, 0),
+    });
+  } else {
+    // Word-wrap into two lines
+    const words = certText.split(' ');
+    let line1 = '';
+    let line2 = '';
+    for (const word of words) {
+      const test = line1 ? `${line1} ${word}` : word;
+      if (fontItalic.widthOfTextAtSize(test, certTextSize) <= maxTextWidth) {
+        line1 = test;
+      } else {
+        line2 += (line2 ? ' ' : '') + word;
+      }
+    }
+    const w1 = fontItalic.widthOfTextAtSize(line1, certTextSize);
+    const w2 = fontItalic.widthOfTextAtSize(line2, certTextSize);
+    page.drawText(line1, { x: (width - w1) / 2, y: stampTop - 15, size: certTextSize, font: fontItalic, color: rgb(0, 0, 0) });
+    page.drawText(line2, { x: (width - w2) / 2, y: stampTop - 27, size: certTextSize, font: fontItalic, color: rgb(0, 0, 0) });
+  }
 
   // Signature image (left side)
   if (signatureImage) {

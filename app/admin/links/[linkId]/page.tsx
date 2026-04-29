@@ -149,8 +149,6 @@ function parseSqliteTs(s: string): Date {
   return new Date(s.replace(' ', 'T') + 'Z');
 }
 
-const IDENTITY_DOC_TYPES = ['passport_front', 'passport_signature', 'id_card', 'personnel_passport_front', 'personnel_passport_signature', 'personnel_id_card'];
-
 const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
 
 function buildLinkTag(firstName: string | null, lastName: string | null): string {
@@ -963,7 +961,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             </h2>
             <button
               onClick={() => handleGenerateCertifiedCopy()}
-              disabled={generatingCert || files.filter(f => !IDENTITY_DOC_TYPES.includes(f.document_type)).length === 0}
+              disabled={generatingCert || files.length === 0}
               className="px-4 py-2 text-sm font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {generatingCert ? (
@@ -1248,15 +1246,13 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     }`}>
                       {file.drive_sync_status}
                     </span>
-                    {!IDENTITY_DOC_TYPES.includes(file.document_type) && (
-                      <button
-                        onClick={() => handleGenerateCertifiedCopy(file.id)}
-                        disabled={certifyingFile === file.id}
-                        className="text-sm text-cyan-600 hover:text-cyan-800 disabled:opacity-50"
-                      >
-                        {certifyingFile === file.id ? 'Certifying...' : 'Certify'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleGenerateCertifiedCopy(file.id)}
+                      disabled={certifyingFile === file.id}
+                      className="text-sm text-cyan-600 hover:text-cyan-800 disabled:opacity-50"
+                    >
+                      {certifyingFile === file.id ? 'Certifying...' : 'Certify'}
+                    </button>
                     <button
                       onClick={() => setPreviewFile({ id: file.id, name: file.display_name || file.original_name, mimeType: file.mime_type })}
                       className="text-sm text-blue-600 hover:text-blue-800"

@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 import { getLinkById, getFilesByLinkId, getFileById, createCertifiedCopy, getCertifiedCopiesByLinkId, logLinkEvent } from '@/db';
-import { generateCertifiedPdf, isCertifiableDocType } from '@/lib/certify';
+import { generateCertifiedPdf } from '@/lib/certify';
 
 export async function POST(request: Request) {
   const isAdmin = await verifyAdminSession();
@@ -31,10 +31,6 @@ export async function POST(request: Request) {
     if (!file || file.link_id !== linkId) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
-    if (!isCertifiableDocType(file.document_type)) {
-      return NextResponse.json({ error: 'Identity documents cannot be certified' }, { status: 400 });
-    }
-
     try {
       const result = await certifySingleFile(file, link, certDate, certDir, admin?.name || 'Admin');
       return NextResponse.json({ generated: [result] });
@@ -46,18 +42,16 @@ export async function POST(request: Request) {
     }
   }
 
-  // Batch mode: certify all certifiable files
+  // Batch mode: certify all uploaded files
   const allFiles = getFilesByLinkId(linkId);
-  const certifiable = allFiles.filter(f => isCertifiableDocType(f.document_type));
-
-  if (certifiable.length === 0) {
-    return NextResponse.json({ error: 'No certifiable documents found' }, { status: 400 });
+  if (allFiles.length === 0) {
+    return NextResponse.json({ error: 'No documents found' }, { status: 400 });
   }
 
   const generated: Array<{ id: string; displayName: string; fileSize: number }> = [];
   const errors: Array<{ fileId: string; error: string }> = [];
 
-  for (const file of certifiable) {
+  for (const file of allFiles) {
     try {
       const result = await certifySingleFile(file, link, certDate, certDir, admin?.name || 'Admin');
       generated.push(result);
@@ -85,7 +79,7 @@ async function certifySingleFile(
   certDir: string,
   certifiedBy: string
 ) {
-  const pdfBuffer = await generateCertifiedPdf(file.stored_path, file.mime_type, certDate);
+  const pdfBuffer = await generateCertifiedPdf(file.stored_path, file.mime_type, certDate, file.document_type);
 
   const certId = crypto.randomUUID();
   const baseName = (file.display_name || file.original_name).replace(/\.[^.]+$/, '');
