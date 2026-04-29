@@ -103,7 +103,7 @@ export async function generateCertifiedPdf(
     if (!loaded) {
       try {
         const { pdf: pdfToImg } = await import('pdf-to-img');
-        const doc = await pdfToImg(buffer, { scale: 2 });
+        const doc = await pdfToImg(storedPath, { scale: 2 });
         let pageNum = 0;
         for await (const pageImage of doc) {
           pageNum++;
