@@ -75,22 +75,48 @@ export async function generateCertifiedPdf(
   const buffer = fs.readFileSync(storedPath);
 
   if (mimeType === 'application/pdf') {
-    const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    for (const idx of srcPdf.getPageIndices()) {
-      const srcPage = srcPdf.getPage(idx);
-      const { width: srcW, height: srcH } = srcPage.getSize();
+    let loaded = false;
+    // Try direct pdf-lib embed first (fastest, preserves vectors)
+    try {
+      const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+      for (const idx of srcPdf.getPageIndices()) {
+        const srcPage = srcPdf.getPage(idx);
+        const { width: srcW, height: srcH } = srcPage.getSize();
 
-      const newHeight = srcH + STAMP_HEIGHT + STAMP_PADDING;
-      const newPage = outputPdf.addPage([srcW, newHeight]);
+        const newHeight = srcH + STAMP_HEIGHT + STAMP_PADDING;
+        const newPage = outputPdf.addPage([srcW, newHeight]);
 
-      // Embed directly from the source PDF (not from a copied page)
-      const embedded = await outputPdf.embedPage(srcPage);
-      newPage.drawPage(embedded, {
-        x: 0,
-        y: STAMP_HEIGHT + STAMP_PADDING,
-        width: srcW,
-        height: srcH,
-      });
+        const embedded = await outputPdf.embedPage(srcPage);
+        newPage.drawPage(embedded, {
+          x: 0,
+          y: STAMP_HEIGHT + STAMP_PADDING,
+          width: srcW,
+          height: srcH,
+        });
+      }
+      loaded = true;
+    } catch (err) {
+      console.warn('[certify] pdf-lib failed, falling back to image render:', err instanceof Error ? err.message : err);
+    }
+
+    // Fallback: render PDF pages to images via pdf-to-img then embed as PNG
+    if (!loaded) {
+      try {
+        const { pdf: pdfToImg } = await import('pdf-to-img');
+        const doc = await pdfToImg(buffer, { scale: 2 });
+        let pageNum = 0;
+        for await (const pageImage of doc) {
+          pageNum++;
+          try {
+            const img = await outputPdf.embedPng(pageImage);
+            addImagePage(outputPdf, img);
+          } catch (imgErr) {
+            console.warn(`[certify] Failed to embed page ${pageNum} as image:`, imgErr);
+          }
+        }
+      } catch (renderErr) {
+        throw new Error(`PDF could not be processed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`);
+      }
     }
   } else if (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
     const img = mimeType === 'image/png'
