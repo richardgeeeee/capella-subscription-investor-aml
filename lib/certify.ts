@@ -77,14 +77,13 @@ export async function generateCertifiedPdf(
   if (mimeType === 'application/pdf') {
     const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
     for (const idx of srcPdf.getPageIndices()) {
-      const [srcPage] = await outputPdf.copyPages(srcPdf, [idx]);
+      const srcPage = srcPdf.getPage(idx);
       const { width: srcW, height: srcH } = srcPage.getSize();
 
-      // Create a new page tall enough for original content + stamp
       const newHeight = srcH + STAMP_HEIGHT + STAMP_PADDING;
       const newPage = outputPdf.addPage([srcW, newHeight]);
 
-      // Embed the original page as a form XObject and draw it at the top
+      // Embed directly from the source PDF (not from a copied page)
       const embedded = await outputPdf.embedPage(srcPage);
       newPage.drawPage(embedded, {
         x: 0,
