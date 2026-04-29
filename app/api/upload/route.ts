@@ -115,6 +115,17 @@ export async function POST(request: Request) {
     fileSize: file.size,
   });
 
+  // Auto-extract payment proof info in background
+  if (documentType === 'payment_proof') {
+    import('@/lib/payment-verify').then(({ extractPaymentInfo }) => {
+      extractPaymentInfo(storedPath, file.type).then(result => {
+        import('@/db').then(({ updatePaymentExtraction }) => {
+          updatePaymentExtraction(fileId, { ...result, checked_at: new Date().toISOString() });
+        });
+      }).catch(err => console.warn('[payment extraction] auto-extract failed:', err));
+    });
+  }
+
   return NextResponse.json({
     success: true,
     fileId,

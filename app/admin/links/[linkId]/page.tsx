@@ -42,6 +42,7 @@ interface FileData {
   uploaded_at: string;
   drive_sync_status: string;
   address_verification: AddressVerification | null;
+  payment_extraction: { records: Array<{ amount: string; currency: string; date: string; payer: string }>; error?: string; checked_at?: string } | null;
 }
 
 interface LinkDetail {
@@ -84,6 +85,7 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   drive_sync_failed:    { label: 'Drive sync failed',         color: 'bg-red-100 text-red-700',         icon: '⚠️' },
   drive_folder_stale:   { label: 'Drive folder deleted',      color: 'bg-amber-100 text-amber-700',    icon: '⚠️' },
   drive_folder_resolved:{ label: 'Drive folder reassigned',   color: 'bg-emerald-100 text-emerald-700', icon: '📁' },
+  payment_extracted:    { label: 'Payment info extracted',    color: 'bg-indigo-100 text-indigo-700',   icon: '💳' },
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
   address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
 };
@@ -111,6 +113,7 @@ function renderEventDetail(ev: TimelineEvent): string {
       return Object.keys(changes).map(k => `${k}: ${formatVal(changes[k].from)} → ${formatVal(changes[k].to)}`).join('; ');
     }
     case 'address_verified': return `${d.status || '?'}${d.reason ? ' — ' + d.reason : ''}`;
+    case 'payment_extracted': return `${d.records} record${d.records === 1 ? '' : 's'}${d.error ? ' — ' + d.error : ''}`;
     case 'drive_folder_stale': return String(d.message || 'Original folder was deleted');
     case 'drive_folder_resolved': return d.folderId ? `Linked to folder ${d.folderId}` : 'New folder will be created';
     default: return '';
@@ -1087,11 +1090,74 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                       Download
                     </a>
                   </div>
+
+                  {/* Payment extraction results */}
+                  {file.document_type === 'payment_proof' && (
+                    <div className="mt-2 w-full">
+                      {file.payment_extraction?.records && file.payment_extraction.records.length > 0 ? (
+                        <div className="bg-white border border-green-200 rounded p-3 space-y-2">
+                          <p className="text-xs font-medium text-green-700">Extracted Payment Info:</p>
+                          {file.payment_extraction.records.map((r, ri) => (
+                            <div key={ri} className="flex flex-wrap gap-4 text-xs text-gray-700 bg-green-50 rounded px-2 py-1.5">
+                              <span><strong>Amount:</strong> {r.currency} {r.amount}</span>
+                              <span><strong>Date:</strong> {r.date}</span>
+                              <span><strong>Payer:</strong> {r.payer}</span>
+                            </div>
+                          ))}
+                          {file.payment_extraction.checked_at && <p className="text-[10px] text-gray-400">Checked: {new Date(file.payment_extraction.checked_at).toLocaleString()}</p>}
+                        </div>
+                      ) : file.payment_extraction?.error ? (
+                        <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">{file.payment_extraction.error}</p>
+                      ) : null}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch('/api/admin/extract-payment', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ fileId: file.id }),
+                            });
+                            if (res.ok) fetchData();
+                          } catch { /* ignore */ }
+                        }}
+                        className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        {file.payment_extraction ? 'Re-extract payment info' : 'Extract payment info'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 );
               })}
             </div>
           )}
+
+          {/* Admin upload payment proof */}
+          <div className="mt-4">
+            <label className="text-sm font-medium text-gray-700 block mb-2">Admin: Upload Payment Proof</label>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !link) return;
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('token', link.token);
+                fd.append('documentType', 'payment_proof');
+                fd.append('adminUpload', '1');
+                try {
+                  const res = await fetch('/api/admin/upload-file', {
+                    method: 'POST',
+                    body: fd,
+                  });
+                  if (res.ok) fetchData();
+                } catch { /* ignore */ }
+                e.target.value = '';
+              }}
+              className="text-sm text-gray-600"
+            />
+          </div>
         </div>
       </div>
 

@@ -218,6 +218,11 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE links ADD COLUMN link_category TEXT NOT NULL DEFAULT 'new_subscription'`);
   }
 
+  // uploaded_files — payment extraction
+  if (!columnExists(db, 'uploaded_files', 'payment_extraction')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN payment_extraction TEXT`);
+  }
+
   // share_class_documents — description column
   if (columnExists(db, 'share_class_documents', 'id') && !columnExists(db, 'share_class_documents', 'description')) {
     db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
@@ -892,6 +897,17 @@ export function updateAddressVerification(fileId: string, verification: AddressV
   const db = getDb();
   return db.prepare(`UPDATE uploaded_files SET address_verification = ? WHERE id = ?`)
     .run(JSON.stringify(verification), fileId);
+}
+
+export function updatePaymentExtraction(fileId: string, extraction: Record<string, unknown>) {
+  const db = getDb();
+  return db.prepare(`UPDATE uploaded_files SET payment_extraction = ? WHERE id = ?`)
+    .run(JSON.stringify(extraction), fileId);
+}
+
+export function getPaymentProofFiles(linkId: string) {
+  const db = getDb();
+  return db.prepare(`SELECT * FROM uploaded_files WHERE link_id = ? AND document_type = 'payment_proof' ORDER BY uploaded_at ASC`).all(linkId) as UploadedFileRow[];
 }
 
 export function getLatestAddressProofFile(linkId: string) {
