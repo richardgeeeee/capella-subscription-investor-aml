@@ -61,6 +61,18 @@ interface LinkDetail {
   subscription_amount: string | null;
 }
 
+interface CertifiedCopy {
+  id: string;
+  link_id: string;
+  source_file_ids: string[];
+  display_name: string;
+  file_size: number;
+  certified_at: string;
+  certified_by: string;
+  drive_sync_status: string;
+  drive_file_id: string | null;
+}
+
 interface DraftFile {
   name: string;
   size: number;
@@ -88,6 +100,9 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   payment_extracted:    { label: 'Payment info extracted',    color: 'bg-indigo-100 text-indigo-700',   icon: '💳' },
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
   address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
+  certified_copy_generated: { label: 'Certified copy generated', color: 'bg-cyan-100 text-cyan-700', icon: '📜' },
+  certified_copy_deleted:   { label: 'Certified copy deleted',   color: 'bg-gray-100 text-gray-700', icon: '🗑️' },
+  certified_copy_synced:    { label: 'Certified copy synced',    color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
 };
 
 function renderEventDetail(ev: TimelineEvent): string {
@@ -116,6 +131,9 @@ function renderEventDetail(ev: TimelineEvent): string {
     case 'payment_extracted': return `${d.records} record${d.records === 1 ? '' : 's'}${d.error ? ' — ' + d.error : ''}`;
     case 'drive_folder_stale': return String(d.message || 'Original folder was deleted');
     case 'drive_folder_resolved': return d.folderId ? `Linked to folder ${d.folderId}` : 'New folder will be created';
+    case 'certified_copy_generated': return `${d.displayName || '?'} (${d.sourceCount} file${d.sourceCount === 1 ? '' : 's'})`;
+    case 'certified_copy_deleted': return String(d.displayName || '');
+    case 'certified_copy_synced': return String(d.displayName || '');
     default: return '';
   }
 }
@@ -187,6 +205,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [submissions, setSubmissions] = useState<SubmissionData[]>([]);
   const [files, setFiles] = useState<FileData[]>([]);
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
+  const [certifiedCopies, setCertifiedCopies] = useState<CertifiedCopy[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
@@ -194,6 +213,9 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [generatingDrafts, setGeneratingDrafts] = useState(false);
   const [draftResult, setDraftResult] = useState<string | null>(null);
+  const [generatingCert, setGeneratingCert] = useState(false);
+  const [certResult, setCertResult] = useState<string | null>(null);
+  const [syncingCert, setSyncingCert] = useState<string | null>(null);
 
   // Inline edit state
   const [editing, setEditing] = useState(false);
@@ -231,6 +253,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setSubmissions(data.submissions);
       setFiles(data.files);
       setTimeline(data.timeline || []);
+      setCertifiedCopies(data.certifiedCopies || []);
       if (draftRes.ok) {
         const draftData = await draftRes.json();
         setDrafts(draftData.files || []);
@@ -439,6 +462,61 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setDraftResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setGeneratingDrafts(false);
+    }
+  };
+
+  const handleGenerateCertifiedCopy = async () => {
+    setGeneratingCert(true);
+    setCertResult(null);
+    try {
+      const res = await fetch('/api/admin/certify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCertResult(`Generated: ${data.certifiedCopy.displayName}`);
+      fetchData();
+    } catch (err) {
+      setCertResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setGeneratingCert(false);
+    }
+  };
+
+  const handleDeleteCertifiedCopy = async (certId: string) => {
+    const ok = await confirm({
+      title: 'Delete certified copy?',
+      message: 'This will permanently delete the generated certified copy PDF.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/admin/certified/${certId}`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch { /* ignore */ }
+  };
+
+  const handleSyncCertifiedCopy = async (certId: string) => {
+    setSyncingCert(certId);
+    try {
+      const res = await fetch(`/api/admin/certified/${certId}`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      fetchData();
+    } catch (err) {
+      await alert({
+        title: 'Sync failed',
+        message: err instanceof Error ? err.message : String(err),
+        variant: 'error',
+      });
+    } finally {
+      setSyncingCert(null);
     }
   };
 
@@ -862,6 +940,86 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           </div>
         )}
 
+        {/* Certified True Copies */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Certified True Copies
+              {certifiedCopies.length > 0 && <span className="text-sm font-normal text-gray-500 ml-2">({certifiedCopies.length})</span>}
+            </h2>
+            <button
+              onClick={handleGenerateCertifiedCopy}
+              disabled={generatingCert || files.filter(f => !['passport_front','passport_signature','id_card','personnel_passport_front','personnel_passport_signature','personnel_id_card'].includes(f.document_type)).length === 0}
+              className="px-4 py-2 text-sm font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {generatingCert ? (
+                <>Generating...</>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Generate Certified True Copy
+                </>
+              )}
+            </button>
+          </div>
+          {certResult && <p className="text-xs text-gray-600 mb-3">{certResult}</p>}
+          {certifiedCopies.length === 0 ? (
+            <p className="text-sm text-gray-500">No certified copies generated yet. Upload non-identity documents first, then click "Generate Certified True Copy" to create a certified PDF.</p>
+          ) : (
+            <div className="space-y-2">
+              {certifiedCopies.map((copy) => (
+                <div key={copy.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{copy.display_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatSize(copy.file_size)} &middot;
+                      Certified {new Date(copy.certified_at.includes('T') ? copy.certified_at : copy.certified_at.replace(' ', 'T') + 'Z').toLocaleString()}
+                      &middot; by {copy.certified_by}
+                      &middot; {copy.source_file_ids.length} source file{copy.source_file_ids.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`px-2 py-0.5 text-xs rounded ${
+                      copy.drive_sync_status === 'synced' ? 'bg-green-100 text-green-700' :
+                      copy.drive_sync_status === 'syncing' ? 'bg-blue-100 text-blue-700' :
+                      copy.drive_sync_status === 'failed' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {copy.drive_sync_status}
+                    </span>
+                    <button
+                      onClick={() => setPreviewFile({ id: `cert:${copy.id}`, name: copy.display_name, mimeType: 'application/pdf' })}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Preview
+                    </button>
+                    <a
+                      href={`/api/admin/certified/${copy.id}`}
+                      className="text-sm text-gray-500 hover:text-gray-700"
+                      download
+                    >
+                      Download
+                    </a>
+                    <button
+                      onClick={() => handleSyncCertifiedCopy(copy.id)}
+                      disabled={syncingCert === copy.id}
+                      className="text-sm text-emerald-600 hover:text-emerald-800 disabled:opacity-50"
+                    >
+                      {syncingCert === copy.id ? 'Syncing...' : 'Sync'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCertifiedCopy(copy.id)}
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Current Form Data */}
         {latestSubmission && (
           <div className="bg-white rounded-lg shadow p-6">
@@ -1171,11 +1329,16 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       {/* File preview modal */}
       {previewFile && (() => {
         const isDraft = previewFile.id.startsWith('draft:');
+        const isCert = previewFile.id.startsWith('cert:');
         const url = isDraft
           ? `/api/admin/drafts/${previewFile.id.slice(6)}?inline=1`
+          : isCert
+          ? `/api/admin/certified/${previewFile.id.slice(5)}?inline=1`
           : `/api/admin/files/${previewFile.id}?inline=1`;
         const downloadUrl = isDraft
           ? `/api/admin/drafts/${previewFile.id.slice(6)}`
+          : isCert
+          ? `/api/admin/certified/${previewFile.id.slice(5)}`
           : `/api/admin/files/${previewFile.id}`;
         const isImage = previewFile.mimeType.startsWith('image/');
         const isPdf = previewFile.mimeType === 'application/pdf';

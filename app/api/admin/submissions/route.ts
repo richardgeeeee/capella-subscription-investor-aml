@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions, getLinkEvents, markLinkViewed } from '@/db';
+import { getSubmissionsByLinkId, getFilesByLinkId, getLinkById, getSubmissionVersions, getLinkEvents, markLinkViewed, getCertifiedCopiesByLinkId } from '@/db';
 import { verifyApiKey, verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
@@ -108,6 +108,12 @@ export async function GET(request: NextRequest) {
 
   timeline.sort((a, b) => b.at.localeCompare(a.at));
 
+  // Certified copies
+  const certifiedCopies = getCertifiedCopiesByLinkId(linkId).map(c => ({
+    ...c,
+    source_file_ids: JSON.parse(c.source_file_ids || '[]'),
+  }));
+
   // Mark this link as viewed by the current admin
   const admin = await getAdminSession();
   if (admin) markLinkViewed(admin.email, linkId);
@@ -117,5 +123,6 @@ export async function GET(request: NextRequest) {
     submissions: submissionsWithVersions,
     files,
     timeline,
+    certifiedCopies,
   });
 }

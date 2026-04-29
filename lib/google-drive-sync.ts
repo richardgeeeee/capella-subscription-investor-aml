@@ -9,6 +9,8 @@ import {
   resetFileSyncStatusForLink,
   setLinkDriveFolderId,
   getSubmissionVersions,
+  getCertifiedCopiesByLinkId,
+  updateCertifiedCopySyncStatus,
   type LinkRow,
 } from '@/db';
 import { formatDriveFolderName, formatDisplayName } from '@/lib/file-naming';
@@ -182,6 +184,9 @@ export async function syncSubmissionToGoogleDrive(submissionId: string, options?
     // 3. Sync any draft agreement files in /app/data/drafts/{linkId}/
     await syncDraftAgreements(link, folderName, upload);
 
+    // 4. Sync certified copies
+    await syncCertifiedCopies(link, upload, !!options?.force);
+
     updateSubmissionSyncStatus(submissionId, 'synced');
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -211,6 +216,23 @@ async function syncDraftAgreements(link: LinkRow, folderName: string, upload: Up
       await upload({ fileName, documentType: 'draft_agreement', file });
     } catch (err) {
       console.error(`[Google Drive Sync] Failed to sync draft agreement ${fileName}:`, err);
+    }
+  }
+}
+
+async function syncCertifiedCopies(link: LinkRow, upload: UploadFn, force: boolean): Promise<void> {
+  const copies = getCertifiedCopiesByLinkId(link.id);
+  for (const copy of copies) {
+    if (!force && copy.drive_sync_status === 'synced') continue;
+    try {
+      updateCertifiedCopySyncStatus(copy.id, 'syncing');
+      const buffer = fs.readFileSync(copy.stored_path);
+      const file = new File([buffer], copy.display_name, { type: 'application/pdf' });
+      const result = await upload({ fileName: copy.display_name, documentType: 'certified_true_copy', file });
+      updateCertifiedCopySyncStatus(copy.id, 'synced', result?.fileId);
+    } catch (err) {
+      console.error(`[Drive Sync] Failed to sync certified copy ${copy.id}:`, err);
+      updateCertifiedCopySyncStatus(copy.id, 'failed');
     }
   }
 }

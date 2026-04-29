@@ -154,6 +154,19 @@ CREATE TABLE IF NOT EXISTS link_events (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_link_events_link_id ON link_events(link_id);
+CREATE TABLE IF NOT EXISTS certified_copies (
+    id              TEXT PRIMARY KEY,
+    link_id         TEXT NOT NULL REFERENCES links(id),
+    source_file_ids TEXT NOT NULL DEFAULT '[]',
+    display_name    TEXT NOT NULL,
+    stored_path     TEXT NOT NULL,
+    file_size       INTEGER NOT NULL,
+    certified_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    certified_by    TEXT NOT NULL,
+    drive_sync_status TEXT NOT NULL DEFAULT 'pending',
+    drive_file_id   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_certified_copies_link_id ON certified_copies(link_id);
 `;
 
 export function getDb(): Database.Database {
@@ -406,6 +419,8 @@ export function deleteLink(id: string): string[] {
   const db = getDb();
   const filePaths = (db.prepare('SELECT stored_path FROM uploaded_files WHERE link_id = ?').all(id) as { stored_path: string }[])
     .map(r => r.stored_path);
+  const certPaths = (db.prepare('SELECT stored_path FROM certified_copies WHERE link_id = ?').all(id) as { stored_path: string }[])
+    .map(r => r.stored_path);
   const submissionIds = (db.prepare('SELECT id FROM submissions WHERE link_id = ?').all(id) as { id: string }[])
     .map(r => r.id);
 
@@ -414,6 +429,7 @@ export function deleteLink(id: string): string[] {
       db.prepare('DELETE FROM submission_versions WHERE submission_id = ?').run(sid);
     }
     db.prepare('DELETE FROM uploaded_files WHERE link_id = ?').run(id);
+    db.prepare('DELETE FROM certified_copies WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM link_events WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM link_views WHERE link_id = ?').run(id);
     db.prepare('DELETE FROM sessions WHERE link_id = ?').run(id);
@@ -423,7 +439,7 @@ export function deleteLink(id: string): string[] {
   });
   tx();
 
-  return filePaths;
+  return [...filePaths, ...certPaths];
 }
 
 // ---- Link event helpers ----
@@ -1168,6 +1184,69 @@ export function deduplicateInvestors() {
     db.prepare('DELETE FROM investors WHERE id = ?').run(id);
   }
   return toDelete.length;
+}
+
+// ---- Certified copy helpers ----
+
+export interface CertifiedCopyRow {
+  id: string;
+  link_id: string;
+  source_file_ids: string;
+  display_name: string;
+  stored_path: string;
+  file_size: number;
+  certified_at: string;
+  certified_by: string;
+  drive_sync_status: string;
+  drive_file_id: string | null;
+}
+
+export function createCertifiedCopy(params: {
+  id: string;
+  linkId: string;
+  sourceFileIds: string[];
+  displayName: string;
+  storedPath: string;
+  fileSize: number;
+  certifiedBy: string;
+}) {
+  const db = getDb();
+  return db.prepare(`
+    INSERT INTO certified_copies (id, link_id, source_file_ids, display_name, stored_path, file_size, certified_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.id,
+    params.linkId,
+    JSON.stringify(params.sourceFileIds),
+    params.displayName,
+    params.storedPath,
+    params.fileSize,
+    params.certifiedBy
+  );
+}
+
+export function getCertifiedCopiesByLinkId(linkId: string): CertifiedCopyRow[] {
+  const db = getDb();
+  return db.prepare('SELECT * FROM certified_copies WHERE link_id = ? ORDER BY certified_at DESC').all(linkId) as CertifiedCopyRow[];
+}
+
+export function getCertifiedCopyById(id: string): CertifiedCopyRow | undefined {
+  const db = getDb();
+  return db.prepare('SELECT * FROM certified_copies WHERE id = ?').get(id) as CertifiedCopyRow | undefined;
+}
+
+export function deleteCertifiedCopy(id: string): string | null {
+  const db = getDb();
+  const row = db.prepare('SELECT stored_path FROM certified_copies WHERE id = ?').get(id) as { stored_path: string } | undefined;
+  if (!row) return null;
+  db.prepare('DELETE FROM certified_copies WHERE id = ?').run(id);
+  return row.stored_path;
+}
+
+export function updateCertifiedCopySyncStatus(id: string, status: string, driveFileId?: string) {
+  const db = getDb();
+  return db.prepare('UPDATE certified_copies SET drive_sync_status = ?, drive_file_id = ? WHERE id = ?')
+    .run(status, driveFileId || null, id);
 }
 
 export function updateInvestor(id: string, params: { firstName?: string; lastName?: string; email?: string | null; shareClass?: string | null }) {
