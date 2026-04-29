@@ -61,7 +61,7 @@ export function formatDisplayName(
   const prefix = namePrefix(firstName, lastName, fallbackName);
   const label = getDocLabel(documentType);
   const ext = extractExt(originalFileName);
-  const suffix = sequenceSuffix && sequenceSuffix > 1 ? ` (${sequenceSuffix})` : '';
+  const suffix = sequenceSuffix ? ` ${sequenceSuffix}` : '';
   return `${prefix}-${label}${suffix}${ext}`;
 }
 
