@@ -11,6 +11,9 @@ const CERT_INFO_LINES = [
   'SFC CE No. BBS460',
 ];
 
+const STAMP_HEIGHT = 130;
+const STAMP_PADDING = 20;
+
 function formatCertDate(date: Date): string {
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -32,69 +35,73 @@ export function isCertifiableDocType(docType: string): boolean {
   return !IDENTITY_DOC_TYPES.has(docType);
 }
 
-interface SourceFile {
-  storedPath: string;
-  mimeType: string;
-}
-
 function getAssetsDir(): string {
   return path.join(process.cwd(), 'assets');
 }
 
+async function loadSignature(doc: PDFDocument): Promise<PDFImage | null> {
+  const signaturePath = path.join(getAssetsDir(), 'maran_signature.png');
+  if (!fs.existsSync(signaturePath)) return null;
+  try {
+    return await doc.embedPng(fs.readFileSync(signaturePath));
+  } catch {
+    console.warn('[certify] Failed to load signature image, skipping');
+    return null;
+  }
+}
+
+/**
+ * Generate a certified true copy for a SINGLE source file.
+ * Each page of the original is placed on a new, taller canvas
+ * so the certification stamp never overlaps original content.
+ */
 export async function generateCertifiedPdf(
-  sourceFiles: SourceFile[],
+  storedPath: string,
+  mimeType: string,
   certDate: Date
 ): Promise<Buffer> {
-  const outputPdf = await PDFDocument.create();
+  if (!fs.existsSync(storedPath)) {
+    throw new Error('Source file not found on disk');
+  }
 
+  const outputPdf = await PDFDocument.create();
   const font = await outputPdf.embedFont(StandardFonts.TimesRoman);
   const fontBold = await outputPdf.embedFont(StandardFonts.TimesRomanBold);
   const fontItalic = await outputPdf.embedFont(StandardFonts.TimesRomanItalic);
+  const signatureImage = await loadSignature(outputPdf);
 
-  const signaturePath = path.join(getAssetsDir(), 'maran_signature.png');
-  let signatureImage: PDFImage | null = null;
-  if (fs.existsSync(signaturePath)) {
-    try {
-      const sigBytes = fs.readFileSync(signaturePath);
-      signatureImage = await outputPdf.embedPng(sigBytes);
-    } catch {
-      console.warn('[certify] Failed to load signature image, skipping');
+  const buffer = fs.readFileSync(storedPath);
+
+  if (mimeType === 'application/pdf') {
+    const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    for (const idx of srcPdf.getPageIndices()) {
+      const [srcPage] = await outputPdf.copyPages(srcPdf, [idx]);
+      const { width: srcW, height: srcH } = srcPage.getSize();
+
+      // Create a new page tall enough for original content + stamp
+      const newHeight = srcH + STAMP_HEIGHT + STAMP_PADDING;
+      const newPage = outputPdf.addPage([srcW, newHeight]);
+
+      // Embed the original page as a form XObject and draw it at the top
+      const embedded = await outputPdf.embedPage(srcPage);
+      newPage.drawPage(embedded, {
+        x: 0,
+        y: STAMP_HEIGHT + STAMP_PADDING,
+        width: srcW,
+        height: srcH,
+      });
     }
-  }
-
-  for (const source of sourceFiles) {
-    if (!fs.existsSync(source.storedPath)) continue;
-    const buffer = fs.readFileSync(source.storedPath);
-
-    if (source.mimeType === 'application/pdf') {
-      try {
-        const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-        const pages = await outputPdf.copyPages(srcPdf, srcPdf.getPageIndices());
-        for (const page of pages) {
-          outputPdf.addPage(page);
-        }
-      } catch (err) {
-        console.warn(`[certify] Failed to load PDF ${source.storedPath}:`, err);
-      }
-    } else if (source.mimeType === 'image/png') {
-      try {
-        const img = await outputPdf.embedPng(buffer);
-        addImagePage(outputPdf, img);
-      } catch (err) {
-        console.warn(`[certify] Failed to embed PNG:`, err);
-      }
-    } else if (source.mimeType === 'image/jpeg' || source.mimeType === 'image/jpg') {
-      try {
-        const img = await outputPdf.embedJpg(buffer);
-        addImagePage(outputPdf, img);
-      } catch (err) {
-        console.warn(`[certify] Failed to embed JPEG:`, err);
-      }
-    }
+  } else if (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
+    const img = mimeType === 'image/png'
+      ? await outputPdf.embedPng(buffer)
+      : await outputPdf.embedJpg(buffer);
+    addImagePage(outputPdf, img);
+  } else {
+    throw new Error(`Unsupported file type: ${mimeType}`);
   }
 
   if (outputPdf.getPageCount() === 0) {
-    throw new Error('No pages could be generated from the source files');
+    throw new Error('No pages could be generated from the source file');
   }
 
   const dateText = formatCertDate(certDate);
@@ -106,24 +113,22 @@ export async function generateCertifiedPdf(
 }
 
 function addImagePage(doc: PDFDocument, img: PDFImage) {
-  const page = doc.addPage([595, 842]); // A4
-  const { width, height } = page.getSize();
+  const A4_W = 595;
   const margin = 40;
-  const stampReserve = 150;
-  const maxW = width - margin * 2;
-  const maxH = height - margin - stampReserve;
+  const maxImgW = A4_W - margin * 2;
 
+  // Scale image to fit A4 width
   const imgAspect = img.width / img.height;
-  let drawW = maxW;
+  let drawW = maxImgW;
   let drawH = drawW / imgAspect;
-  if (drawH > maxH) {
-    drawH = maxH;
-    drawW = drawH * imgAspect;
-  }
+
+  // Total page height = margin + image + padding + stamp + margin
+  const pageHeight = margin + drawH + STAMP_PADDING + STAMP_HEIGHT + margin;
+  const page = doc.addPage([A4_W, pageHeight]);
 
   page.drawImage(img, {
-    x: (width - drawW) / 2,
-    y: height - margin - drawH,
+    x: (A4_W - drawW) / 2,
+    y: STAMP_HEIGHT + STAMP_PADDING + margin,
     width: drawW,
     height: drawH,
   });
@@ -142,21 +147,10 @@ function addCertificationStamp(
   const { width } = page.getSize();
   const { font, fontBold, fontItalic, signatureImage, dateText } = opts;
 
-  const stampBottom = 25;
-  const stampHeight = 120;
-  const stampTop = stampBottom + stampHeight;
+  const stampBottom = 15;
+  const stampTop = stampBottom + STAMP_HEIGHT;
 
-  // White background for readability
-  page.drawRectangle({
-    x: 30,
-    y: stampBottom,
-    width: width - 60,
-    height: stampHeight,
-    color: rgb(1, 1, 1),
-    opacity: 0.9,
-  });
-
-  // Separator line
+  // Separator line between original content and stamp
   page.drawLine({
     start: { x: 40, y: stampTop },
     end: { x: width - 40, y: stampTop },
@@ -169,7 +163,7 @@ function addCertificationStamp(
   const certTextWidth = fontItalic.widthOfTextAtSize(CERT_TEXT, certTextSize);
   page.drawText(CERT_TEXT, {
     x: (width - certTextWidth) / 2,
-    y: stampTop - 15,
+    y: stampTop - 18,
     size: certTextSize,
     font: fontItalic,
     color: rgb(0, 0, 0),
@@ -188,7 +182,7 @@ function addCertificationStamp(
     }
     page.drawImage(signatureImage, {
       x: width / 2 - 140,
-      y: stampBottom + 15,
+      y: stampBottom + 10,
       width: sigW,
       height: sigH,
     });
@@ -196,15 +190,15 @@ function addCertificationStamp(
 
   // Info text block (right side)
   const infoX = width / 2 + 10;
-  const infoStartY = stampTop - 35;
-  const lineHeight = 13;
+  const infoStartY = stampTop - 40;
+  const lineHeight = 14;
   const allLines = [...CERT_INFO_LINES, dateText];
 
   for (let i = 0; i < allLines.length; i++) {
     page.drawText(allLines[i], {
       x: infoX,
       y: infoStartY - i * lineHeight,
-      size: 9.5,
+      size: 10,
       font: i === 0 ? fontBold : font,
       color: rgb(0, 0, 0),
     });

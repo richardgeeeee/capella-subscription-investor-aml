@@ -149,6 +149,8 @@ function parseSqliteTs(s: string): Date {
   return new Date(s.replace(' ', 'T') + 'Z');
 }
 
+const IDENTITY_DOC_TYPES = ['passport_front', 'passport_signature', 'id_card', 'personnel_passport_front', 'personnel_passport_signature', 'personnel_id_card'];
+
 const SHARE_CLASSES = ['Class E', 'Class MM', 'Class A', 'Class B'];
 
 function buildLinkTag(firstName: string | null, lastName: string | null): string {
@@ -214,6 +216,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [generatingDrafts, setGeneratingDrafts] = useState(false);
   const [draftResult, setDraftResult] = useState<string | null>(null);
   const [generatingCert, setGeneratingCert] = useState(false);
+  const [certifyingFile, setCertifyingFile] = useState<string | null>(null);
   const [certResult, setCertResult] = useState<string | null>(null);
   const [syncingCert, setSyncingCert] = useState<string | null>(null);
 
@@ -465,23 +468,34 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     }
   };
 
-  const handleGenerateCertifiedCopy = async () => {
-    setGeneratingCert(true);
+  const handleGenerateCertifiedCopy = async (fileId?: string) => {
+    if (fileId) {
+      setCertifyingFile(fileId);
+    } else {
+      setGeneratingCert(true);
+    }
     setCertResult(null);
     try {
       const res = await fetch('/api/admin/certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId }),
+        body: JSON.stringify({ linkId, fileId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setCertResult(`Generated: ${data.certifiedCopy.displayName}`);
+      const count = data.generated?.length || 0;
+      const errCount = data.errors?.length || 0;
+      setCertResult(
+        errCount > 0
+          ? `Generated ${count}, ${errCount} failed`
+          : `Generated ${count} certified cop${count === 1 ? 'y' : 'ies'}`
+      );
       fetchData();
     } catch (err) {
       setCertResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setGeneratingCert(false);
+      setCertifyingFile(null);
     }
   };
 
@@ -948,8 +962,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               {certifiedCopies.length > 0 && <span className="text-sm font-normal text-gray-500 ml-2">({certifiedCopies.length})</span>}
             </h2>
             <button
-              onClick={handleGenerateCertifiedCopy}
-              disabled={generatingCert || files.filter(f => !['passport_front','passport_signature','id_card','personnel_passport_front','personnel_passport_signature','personnel_id_card'].includes(f.document_type)).length === 0}
+              onClick={() => handleGenerateCertifiedCopy()}
+              disabled={generatingCert || files.filter(f => !IDENTITY_DOC_TYPES.includes(f.document_type)).length === 0}
               className="px-4 py-2 text-sm font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {generatingCert ? (
@@ -957,7 +971,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Generate Certified True Copy
+                  Certify All Documents
                 </>
               )}
             </button>
@@ -1234,6 +1248,15 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     }`}>
                       {file.drive_sync_status}
                     </span>
+                    {!IDENTITY_DOC_TYPES.includes(file.document_type) && (
+                      <button
+                        onClick={() => handleGenerateCertifiedCopy(file.id)}
+                        disabled={certifyingFile === file.id}
+                        className="text-sm text-cyan-600 hover:text-cyan-800 disabled:opacity-50"
+                      >
+                        {certifyingFile === file.id ? 'Certifying...' : 'Certify'}
+                      </button>
+                    )}
                     <button
                       onClick={() => setPreviewFile({ id: file.id, name: file.display_name || file.original_name, mimeType: file.mime_type })}
                       className="text-sm text-blue-600 hover:text-blue-800"
