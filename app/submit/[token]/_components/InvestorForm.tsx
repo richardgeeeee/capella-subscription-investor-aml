@@ -525,40 +525,96 @@ export function InvestorForm({
             </div>
           )}
 
-          {docTypes.map((doc) => {
-            const existingFile = uploadedFiles.find(f => f.documentType === doc.key);
-            const isMultiple = 'multiple' in doc && doc.multiple;
-            const isAssetProof = doc.key === 'liquid_asset_proof';
-            const required = isAssetProof && waivesAssetProof ? false : doc.required;
-            return (
-              <div key={doc.key}>
-                {isAssetProof && investorType === 'individual' && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                    {t('footnote_asset_proof', lang)}
-                  </div>
-                )}
-                {isAssetProof && investorType === 'individual' && waivesAssetProof && (
-                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                    {t('footnote_asset_proof_waived', lang)}
-                  </div>
-                )}
-                <FileDropzone
-                key={doc.key}
-                token={token}
-                documentType={doc.key}
-                label={t(doc.key, lang)}
-                required={required}
-                existingFile={existingFile ? {
-                  id: existingFile.id,
-                  originalName: existingFile.originalName,
-                  fileSize: existingFile.fileSize,
-                } : undefined}
-                onUploaded={handleFileUploaded}
-                multiple={isMultiple}
-              />
+          {investorType === 'individual' ? (
+            <>
+              {/* Passport group */}
+              <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-white">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('doc_group_passport', lang)}</h3>
+                <p className="text-xs text-gray-500 mb-3">{t('doc_group_passport_hint', lang)}</p>
+                <div className="space-y-3 pl-2 border-l-2 border-blue-200">
+                  {(['passport_front', 'passport_signature'] as const).map(key => {
+                    const doc = docTypes.find(d => d.key === key)!;
+                    const existingFile = uploadedFiles.find(f => f.documentType === key);
+                    return (
+                      <FileDropzone
+                        key={key}
+                        token={token}
+                        documentType={key}
+                        label={t(key, lang)}
+                        required={doc.required}
+                        existingFile={existingFile ? { id: existingFile.id, originalName: existingFile.originalName, fileSize: existingFile.fileSize } : undefined}
+                        onUploaded={handleFileUploaded}
+                        multiple
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            );
-          })}
+
+              {/* ID Card group */}
+              <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-white">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('doc_group_id', lang)}</h3>
+                <p className="text-xs text-gray-500 mb-3">{t('doc_group_id_hint', lang)}</p>
+                <div className="pl-2 border-l-2 border-amber-200">
+                  <FileDropzone
+                    token={token}
+                    documentType="id_card"
+                    label={t('id_card', lang)}
+                    required
+                    existingFile={(() => { const f = uploadedFiles.find(f => f.documentType === 'id_card'); return f ? { id: f.id, originalName: f.originalName, fileSize: f.fileSize } : undefined; })()}
+                    onUploaded={handleFileUploaded}
+                    multiple
+                  />
+                </div>
+              </div>
+
+              {/* Address proof */}
+              <FileDropzone
+                token={token}
+                documentType="address_proof"
+                label={t('address_proof', lang)}
+                required
+                existingFile={(() => { const f = uploadedFiles.find(f => f.documentType === 'address_proof'); return f ? { id: f.id, originalName: f.originalName, fileSize: f.fileSize } : undefined; })()}
+                onUploaded={handleFileUploaded}
+              />
+
+              {/* Asset proof */}
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                {t('footnote_asset_proof', lang)}
+              </div>
+              {waivesAssetProof && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                  {t('footnote_asset_proof_waived', lang)}
+                </div>
+              )}
+              <FileDropzone
+                token={token}
+                documentType="liquid_asset_proof"
+                label={t('liquid_asset_proof', lang)}
+                required={!waivesAssetProof}
+                existingFile={(() => { const f = uploadedFiles.find(f => f.documentType === 'liquid_asset_proof'); return f ? { id: f.id, originalName: f.originalName, fileSize: f.fileSize } : undefined; })()}
+                onUploaded={handleFileUploaded}
+              />
+            </>
+          ) : (
+            /* Corporate: keep flat rendering */
+            docTypes.map((doc) => {
+              const existingFile = uploadedFiles.find(f => f.documentType === doc.key);
+              const isMultiple = 'multiple' in doc && doc.multiple;
+              return (
+                <FileDropzone
+                  key={doc.key}
+                  token={token}
+                  documentType={doc.key}
+                  label={t(doc.key, lang)}
+                  required={doc.required}
+                  existingFile={existingFile ? { id: existingFile.id, originalName: existingFile.originalName, fileSize: existingFile.fileSize } : undefined}
+                  onUploaded={handleFileUploaded}
+                  multiple={isMultiple}
+                />
+              );
+            })
+          )}
         </div>
 
         {/* Payment Proof — separate section */}
