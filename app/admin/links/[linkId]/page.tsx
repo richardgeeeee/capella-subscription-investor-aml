@@ -1134,10 +1134,11 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
           {/* Admin upload payment proof */}
           <div className="mt-4">
-            <label className="text-sm font-medium text-gray-700 block mb-2">Admin: Upload Payment Proof</label>
             <input
+              id="admin-payment-upload"
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp"
+              className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file || !link) return;
@@ -1155,8 +1156,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                 } catch { /* ignore */ }
                 e.target.value = '';
               }}
-              className="text-sm text-gray-600"
             />
+            <button
+              onClick={() => document.getElementById('admin-payment-upload')?.click()}
+              className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors inline-flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              Upload Payment Proof (Admin)
+            </button>
           </div>
         </div>
       </div>
