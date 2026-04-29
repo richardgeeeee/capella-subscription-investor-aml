@@ -217,6 +217,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [certifyingFile, setCertifyingFile] = useState<string | null>(null);
   const [certResult, setCertResult] = useState<string | null>(null);
   const [syncingCert, setSyncingCert] = useState<string | null>(null);
+  const [selectedForCert, setSelectedForCert] = useState<Set<string>>(new Set());
 
   // Inline edit state
   const [editing, setEditing] = useState(false);
@@ -474,10 +475,16 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     }
     setCertResult(null);
     try {
+      const body: Record<string, unknown> = { linkId };
+      if (fileId) {
+        body.fileId = fileId;
+      } else if (selectedForCert.size > 0) {
+        body.fileIds = Array.from(selectedForCert);
+      }
       const res = await fetch('/api/admin/certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId, fileId }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -488,6 +495,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           ? `Generated ${count}, ${errCount} failed`
           : `Generated ${count} certified cop${count === 1 ? 'y' : 'ies'}`
       );
+      setSelectedForCert(new Set());
       fetchData();
     } catch (err) {
       setCertResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -959,24 +967,9 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               Certified True Copies
               {certifiedCopies.length > 0 && <span className="text-sm font-normal text-gray-500 ml-2">({certifiedCopies.length})</span>}
             </h2>
-            <button
-              onClick={() => handleGenerateCertifiedCopy()}
-              disabled={generatingCert || files.length === 0}
-              className="px-4 py-2 text-sm font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-2"
-            >
-              {generatingCert ? (
-                <>Generating...</>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Certify All Documents
-                </>
-              )}
-            </button>
           </div>
-          {certResult && <p className="text-xs text-gray-600 mb-3">{certResult}</p>}
           {certifiedCopies.length === 0 ? (
-            <p className="text-sm text-gray-500">No certified copies generated yet. Upload non-identity documents first, then click "Generate Certified True Copy" to create a certified PDF.</p>
+            <p className="text-sm text-gray-500">No certified copies generated yet. Select files above and click &ldquo;Certify Selected&rdquo;, or use the per-file &ldquo;Certify&rdquo; button.</p>
           ) : (
             <div className="space-y-2">
               {certifiedCopies.map((copy) => (
@@ -1192,23 +1185,44 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           </div>
         )}
 
-        {/* Uploaded Files (current) */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">All Uploaded Documents ({files.length})</h2>
-          {files.length === 0 ? (
-            <p className="text-gray-500 text-sm">No files uploaded yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {files.map((file) => {
-                const av = file.address_verification;
-                const rowBg = av?.status === 'mismatched' ? 'bg-red-50 border border-red-200'
-                  : av?.status === 'matched' ? 'bg-green-50 border border-green-200'
-                  : av?.status === 'pending' ? 'bg-blue-50 border border-blue-200'
-                  : av?.status === 'failed' ? 'bg-amber-50 border border-amber-200'
-                  : 'bg-gray-50';
-                return (
-                <div key={file.id} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg ${rowBg}`}>
-                  <div className="min-w-0">
+        {/* Uploaded Files — grouped by category */}
+        {(() => {
+          const IDENTITY_TYPES = new Set(['passport_front', 'passport_signature', 'id_card', 'personnel_passport_front', 'personnel_passport_signature', 'personnel_id_card']);
+          const PROOF_TYPES = new Set(['address_proof', 'liquid_asset_proof']);
+          const PAYMENT_TYPES = new Set(['payment_proof']);
+
+          const identityFiles = files.filter(f => IDENTITY_TYPES.has(f.document_type));
+          const proofFiles = files.filter(f => PROOF_TYPES.has(f.document_type));
+          const paymentFiles = files.filter(f => PAYMENT_TYPES.has(f.document_type));
+          const otherFiles = files.filter(f => !IDENTITY_TYPES.has(f.document_type) && !PROOF_TYPES.has(f.document_type) && !PAYMENT_TYPES.has(f.document_type));
+
+          const toggleCertSelect = (fileId: string) => {
+            setSelectedForCert(prev => {
+              const next = new Set(prev);
+              if (next.has(fileId)) next.delete(fileId); else next.add(fileId);
+              return next;
+            });
+          };
+          const selectAll = () => setSelectedForCert(new Set(files.map(f => f.id)));
+          const selectNone = () => setSelectedForCert(new Set());
+
+          const renderFileRow = (file: FileData) => {
+            const av = file.address_verification;
+            const rowBg = av?.status === 'mismatched' ? 'bg-red-50 border border-red-200'
+              : av?.status === 'matched' ? 'bg-green-50 border border-green-200'
+              : av?.status === 'pending' ? 'bg-blue-50 border border-blue-200'
+              : av?.status === 'failed' ? 'bg-amber-50 border border-amber-200'
+              : 'bg-gray-50';
+            return (
+              <div key={file.id} className={`flex flex-col gap-2 p-3 rounded-lg ${rowBg}`}>
+                <div className="flex items-start sm:items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedForCert.has(file.id)}
+                    onChange={() => toggleCertSelect(file.id)}
+                    className="mt-1 sm:mt-0 w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 flex-shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900">
                       {file.display_name || file.original_name}
                       {av?.status === 'mismatched' && (
@@ -1223,15 +1237,9 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                           Address matched
                         </span>
                       )}
-                      {av?.status === 'pending' && (
-                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Verifying…</span>
-                      )}
-                      {av?.status === 'failed' && (
-                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">Verification failed</span>
-                      )}
-                      {av?.status === 'skipped' && (
-                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">Skipped</span>
-                      )}
+                      {av?.status === 'pending' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Verifying…</span>}
+                      {av?.status === 'failed' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">Verification failed</span>}
+                      {av?.status === 'skipped' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">Skipped</span>}
                     </p>
                     <p className="text-xs text-gray-500">
                       {file.document_type} &middot; {formatSize(file.file_size)} &middot; {new Date(file.uploaded_at).toLocaleString()}
@@ -1240,109 +1248,142 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                       )}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 text-xs rounded ${
-                      file.drive_sync_status === 'synced' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className={`px-2 py-0.5 text-xs rounded ${file.drive_sync_status === 'synced' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                       {file.drive_sync_status}
                     </span>
-                    <button
-                      onClick={() => handleGenerateCertifiedCopy(file.id)}
-                      disabled={certifyingFile === file.id}
-                      className="text-sm text-cyan-600 hover:text-cyan-800 disabled:opacity-50"
-                    >
+                    <button onClick={() => handleGenerateCertifiedCopy(file.id)} disabled={certifyingFile === file.id} className="text-sm text-cyan-600 hover:text-cyan-800 disabled:opacity-50">
                       {certifyingFile === file.id ? 'Certifying...' : 'Certify'}
                     </button>
-                    <button
-                      onClick={() => setPreviewFile({ id: file.id, name: file.display_name || file.original_name, mimeType: file.mime_type })}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Preview
-                    </button>
-                    <a
-                      href={`/api/admin/files/${file.id}`}
-                      className="text-sm text-gray-500 hover:text-gray-700"
-                      download
-                    >
-                      Download
-                    </a>
+                    <button onClick={() => setPreviewFile({ id: file.id, name: file.display_name || file.original_name, mimeType: file.mime_type })} className="text-sm text-blue-600 hover:text-blue-800">Preview</button>
+                    <a href={`/api/admin/files/${file.id}`} className="text-sm text-gray-500 hover:text-gray-700" download>Download</a>
                   </div>
+                </div>
+                {file.document_type === 'payment_proof' && (
+                  <div className="ml-7">
+                    {file.payment_extraction?.records && file.payment_extraction.records.length > 0 ? (
+                      <div className="bg-white border border-green-200 rounded p-3 space-y-2">
+                        <p className="text-xs font-medium text-green-700">Extracted Payment Info:</p>
+                        {file.payment_extraction.records.map((r, ri) => (
+                          <div key={ri} className="flex flex-wrap gap-4 text-xs text-gray-700 bg-green-50 rounded px-2 py-1.5">
+                            <span><strong>Amount:</strong> {r.currency} {r.amount}</span>
+                            <span><strong>Date:</strong> {r.date}</span>
+                            <span><strong>Payer:</strong> {r.payer}</span>
+                          </div>
+                        ))}
+                        {file.payment_extraction.checked_at && <p className="text-[10px] text-gray-400">Checked: {new Date(file.payment_extraction.checked_at).toLocaleString()}</p>}
+                      </div>
+                    ) : file.payment_extraction?.error ? (
+                      <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">{file.payment_extraction.error}</p>
+                    ) : null}
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/admin/extract-payment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileId: file.id }) });
+                          if (res.ok) fetchData();
+                        } catch { /* ignore */ }
+                      }}
+                      className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      {file.payment_extraction ? 'Re-extract payment info' : 'Extract payment info'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          };
 
-                  {/* Payment extraction results */}
-                  {file.document_type === 'payment_proof' && (
-                    <div className="mt-2 w-full">
-                      {file.payment_extraction?.records && file.payment_extraction.records.length > 0 ? (
-                        <div className="bg-white border border-green-200 rounded p-3 space-y-2">
-                          <p className="text-xs font-medium text-green-700">Extracted Payment Info:</p>
-                          {file.payment_extraction.records.map((r, ri) => (
-                            <div key={ri} className="flex flex-wrap gap-4 text-xs text-gray-700 bg-green-50 rounded px-2 py-1.5">
-                              <span><strong>Amount:</strong> {r.currency} {r.amount}</span>
-                              <span><strong>Date:</strong> {r.date}</span>
-                              <span><strong>Payer:</strong> {r.payer}</span>
-                            </div>
-                          ))}
-                          {file.payment_extraction.checked_at && <p className="text-[10px] text-gray-400">Checked: {new Date(file.payment_extraction.checked_at).toLocaleString()}</p>}
-                        </div>
-                      ) : file.payment_extraction?.error ? (
-                        <p className="text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">{file.payment_extraction.error}</p>
-                      ) : null}
+          return (
+            <div className="bg-white rounded-lg shadow p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">All Uploaded Documents ({files.length})</h2>
+                {files.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={selectAll} className="text-xs text-gray-500 hover:text-gray-700">Select all</button>
+                    <span className="text-xs text-gray-300">|</span>
+                    <button onClick={selectNone} className="text-xs text-gray-500 hover:text-gray-700">None</button>
+                    {selectedForCert.size > 0 && (
                       <button
-                        onClick={async () => {
-                          try {
-                            const res = await fetch('/api/admin/extract-payment', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ fileId: file.id }),
-                            });
-                            if (res.ok) fetchData();
-                          } catch { /* ignore */ }
-                        }}
-                        className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                        onClick={() => handleGenerateCertifiedCopy()}
+                        disabled={generatingCert}
+                        className="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1"
                       >
-                        {file.payment_extraction ? 'Re-extract payment info' : 'Extract payment info'}
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        {generatingCert ? 'Generating...' : `Certify Selected (${selectedForCert.size})`}
                       </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {certResult && <p className="text-xs text-gray-600 -mt-4">{certResult}</p>}
+
+              {files.length === 0 ? (
+                <p className="text-gray-500 text-sm">No files uploaded yet.</p>
+              ) : (
+                <>
+                  {/* 1. Identity documents */}
+                  {identityFiles.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Passport & ID Documents</h3>
+                      <div className="space-y-2">{identityFiles.map(renderFileRow)}</div>
                     </div>
                   )}
-                </div>
-                );
-              })}
-            </div>
-          )}
 
-          {/* Admin upload payment proof */}
-          <div className="mt-4">
-            <input
-              id="admin-payment-upload"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file || !link) return;
-                const fd = new FormData();
-                fd.append('file', file);
-                fd.append('token', link.token);
-                fd.append('documentType', 'payment_proof');
-                fd.append('adminUpload', '1');
-                try {
-                  const res = await fetch('/api/admin/upload-file', {
-                    method: 'POST',
-                    body: fd,
-                  });
-                  if (res.ok) fetchData();
-                } catch { /* ignore */ }
-                e.target.value = '';
-              }}
-            />
-            <button
-              onClick={() => document.getElementById('admin-payment-upload')?.click()}
-              className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors inline-flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-              Upload Payment Proof (Admin)
-            </button>
-          </div>
-        </div>
+                  {/* 2. Address & asset proof */}
+                  {proofFiles.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Address & Asset Proof</h3>
+                      <div className="space-y-2">{proofFiles.map(renderFileRow)}</div>
+                    </div>
+                  )}
+
+                  {/* 3. Other corporate documents */}
+                  {otherFiles.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Other Documents</h3>
+                      <div className="space-y-2">{otherFiles.map(renderFileRow)}</div>
+                    </div>
+                  )}
+
+                  {/* 4. Payment proof + admin upload */}
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Proof</h3>
+                    {paymentFiles.length > 0 && (
+                      <div className="space-y-2 mb-3">{paymentFiles.map(renderFileRow)}</div>
+                    )}
+                    <input
+                      id="admin-payment-upload"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !link) return;
+                        const fd = new FormData();
+                        fd.append('file', file);
+                        fd.append('token', link.token);
+                        fd.append('documentType', 'payment_proof');
+                        fd.append('adminUpload', '1');
+                        try {
+                          const res = await fetch('/api/admin/upload-file', { method: 'POST', body: fd });
+                          if (res.ok) fetchData();
+                        } catch { /* ignore */ }
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      onClick={() => document.getElementById('admin-payment-upload')?.click()}
+                      className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors inline-flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                      Upload Payment Proof (Admin)
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* File preview modal */}

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { linkId, fileId } = await request.json();
+  const { linkId, fileId, fileIds } = await request.json();
   if (!linkId) return NextResponse.json({ error: 'linkId is required' }, { status: 400 });
 
   const link = getLinkById(linkId);
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   );
   if (!fs.existsSync(certDir)) fs.mkdirSync(certDir, { recursive: true });
 
-  // Single file mode: certify one specific file
+  // Single file mode
   if (fileId) {
     const file = getFileById(fileId);
     if (!file || file.link_id !== linkId) {
@@ -42,16 +42,22 @@ export async function POST(request: Request) {
     }
   }
 
-  // Batch mode: certify all uploaded files
-  const allFiles = getFilesByLinkId(linkId);
-  if (allFiles.length === 0) {
+  // Batch mode: selected files (fileIds) or all files
+  let filesToCertify;
+  if (Array.isArray(fileIds) && fileIds.length > 0) {
+    filesToCertify = fileIds.map((id: string) => getFileById(id)).filter((f): f is NonNullable<typeof f> => !!f && f.link_id === linkId);
+  } else {
+    filesToCertify = getFilesByLinkId(linkId);
+  }
+
+  if (filesToCertify.length === 0) {
     return NextResponse.json({ error: 'No documents found' }, { status: 400 });
   }
 
   const generated: Array<{ id: string; displayName: string; fileSize: number }> = [];
   const errors: Array<{ fileId: string; error: string }> = [];
 
-  for (const file of allFiles) {
+  for (const file of filesToCertify) {
     try {
       const result = await certifySingleFile(file, link, certDate, certDir, admin?.name || 'Admin');
       generated.push(result);
