@@ -1,5 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
+import { execSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 const CERT_TEXT_DEFAULT = 'I hereby certify that this photo is of true likeness and complete copy of the original';
@@ -99,23 +101,24 @@ export async function generateCertifiedPdf(
       console.warn('[certify] pdf-lib failed, falling back to image render:', err instanceof Error ? err.message : err);
     }
 
-    // Fallback: render PDF pages to images via pdf-to-img then embed as PNG
+    // Fallback: render PDF pages to images via pdftoppm (poppler-utils)
     if (!loaded) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'certify-'));
       try {
-        const { pdf: pdfToImg } = await import('pdf-to-img');
-        const doc = await pdfToImg(storedPath, { scale: 2 });
-        let pageNum = 0;
-        for await (const pageImage of doc) {
-          pageNum++;
-          try {
-            const img = await outputPdf.embedPng(pageImage);
-            addImagePage(outputPdf, img);
-          } catch (imgErr) {
-            console.warn(`[certify] Failed to embed page ${pageNum} as image:`, imgErr);
-          }
+        execSync(`pdftoppm -png -r 200 "${storedPath}" "${path.join(tmpDir, 'page')}"`, { timeout: 30000 });
+        const pngFiles = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
+        for (const pngFile of pngFiles) {
+          const pngBuf = fs.readFileSync(path.join(tmpDir, pngFile));
+          const img = await outputPdf.embedPng(pngBuf);
+          addImagePage(outputPdf, img);
+        }
+        if (pngFiles.length === 0) {
+          throw new Error('pdftoppm produced no output');
         }
       } catch (renderErr) {
         throw new Error(`PDF could not be processed: ${renderErr instanceof Error ? renderErr.message : String(renderErr)}`);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     }
   } else if (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
