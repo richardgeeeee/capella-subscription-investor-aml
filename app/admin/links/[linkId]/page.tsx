@@ -560,7 +560,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b">
+      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-4">
           <Link href="/admin" className="text-gray-400 hover:text-gray-600">&larr; Back</Link>
           <h1 className="text-xl font-bold text-gray-900">{link.investor_name}</h1>
