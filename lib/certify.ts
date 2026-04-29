@@ -38,10 +38,7 @@ interface SourceFile {
 }
 
 function getAssetsDir(): string {
-  return path.join(
-    process.env.DATABASE_PATH ? path.dirname(process.env.DATABASE_PATH) : './data',
-    'assets'
-  );
+  return path.join(process.cwd(), 'assets');
 }
 
 export async function generateCertifiedPdf(
