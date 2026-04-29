@@ -51,7 +51,7 @@ export async function generateCertifiedPdf(
   const fontBold = await outputPdf.embedFont(StandardFonts.TimesRomanBold);
   const fontItalic = await outputPdf.embedFont(StandardFonts.TimesRomanItalic);
 
-  const signaturePath = path.join(getAssetsDir(), 'signature.png');
+  const signaturePath = path.join(getAssetsDir(), 'maran_signature.png');
   let signatureImage: PDFImage | null = null;
   if (fs.existsSync(signaturePath)) {
     try {
