@@ -1302,16 +1302,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     <button onClick={selectAll} className="text-xs text-gray-500 hover:text-gray-700">Select all</button>
                     <span className="text-xs text-gray-300">|</span>
                     <button onClick={selectNone} className="text-xs text-gray-500 hover:text-gray-700">None</button>
-                    {selectedForCert.size > 0 && (
-                      <button
-                        onClick={() => handleGenerateCertifiedCopy()}
-                        disabled={generatingCert}
-                        className="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        {generatingCert ? 'Generating...' : `Certify Selected (${selectedForCert.size})`}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleGenerateCertifiedCopy()}
+                      disabled={generatingCert || selectedForCert.size === 0}
+                      className="ml-2 px-3 py-1.5 text-xs font-medium text-white bg-cyan-600 rounded-lg hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {generatingCert ? 'Generating...' : selectedForCert.size > 0 ? `Certify Selected (${selectedForCert.size})` : 'Certify Selected'}
+                    </button>
                   </div>
                 )}
               </div>
