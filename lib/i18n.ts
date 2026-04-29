@@ -78,9 +78,9 @@ export const labels: Record<string, { en: string; zh: string }> = {
   accountNumber: { en: 'Account No. (in USD)', zh: '美元账号' },
 
   // -- Document types (individual) --
-  passport_front: { en: 'Passport — Front Page (photo, name, DOB, nationality)', zh: '护照 — 首页（显示照片、姓名、出生日期和国籍）' },
-  passport_signature: { en: 'Passport — Signature Page', zh: '护照 — 签字页' },
-  id_card: { en: 'ID Card Copy (with signature)', zh: '身份证复印件（需附签字）' },
+  passport_front: { en: 'Passport Document', zh: '护照文件' },
+  passport_signature: { en: 'Passport Signature Page', zh: '护照签字页' },
+  id_card: { en: 'ID Card Document', zh: '身份证文件' },
   address_proof: { en: 'Address Proof (within 3 months)', zh: '地址证明（最近三个月内）' },
   liquid_asset_proof: { en: 'Liquid Asset Proof > HKD 8M (if subscription < HKD 8M)', zh: '流动资产证明（超过800万港币，如申购金额低于800万港币）' },
 
@@ -121,14 +121,16 @@ export const labels: Record<string, { en: string; zh: string }> = {
   notice_acknowledged: { en: 'Acknowledged', zh: '已知晓' },
   doc_group_passport: { en: 'Passport', zh: '护照' },
   doc_group_passport_hint: {
-    en: 'Please upload a clear copy of your passport front page and signature page.',
-    zh: '请上传清晰的护照首页和签字页复印件。',
+    en: 'Upload your passport front page. Use "+ Add attachment" for additional pages (signature page, Certified True Copy, etc.).',
+    zh: '请上传护照首页。如有更多页面（签字页、Certified True Copy 等），请点击"添加附件"。',
   },
   doc_group_id: { en: 'National ID Card (HKID / NRIC / Mainland ID / etc.)', zh: '身份证（香港身份证、新加坡NRIC、内地身份证等）' },
   doc_group_id_hint: {
-    en: 'Please upload your ID card copy with signature. You may upload multiple files: plain copy, signed copy, Certified True Copy, etc.',
-    zh: '请上传身份证复印件并附签字。可上传多份文件：普通复印件、含签名复印件、Certified True Copy 等。',
+    en: 'Upload your ID card copy. Use "+ Add attachment" for additional copies (signed copy, Certified True Copy, etc.).',
+    zh: '请上传身份证复印件。如有更多文件（含签名复印件、Certified True Copy 等），请点击"添加附件"。',
   },
+  add_attachment: { en: '+ Add attachment', zh: '+ 添加附件' },
+  remove_attachment: { en: 'Remove', zh: '移除' },
   section_topup: { en: 'Top-up Subscription', zh: '追加投资' },
   section_topup_documents: { en: 'Payment Proof Upload', zh: '付款证明上传' },
   topup_bank_notice: {

@@ -13,7 +13,6 @@ export const ACCEPTED_MIME_TYPES = [
 
 export const INDIVIDUAL_DOCUMENT_TYPES = [
   { key: 'passport_front', required: true, multiple: true },
-  { key: 'passport_signature', required: true, multiple: true },
   { key: 'id_card', required: true, multiple: true },
   { key: 'address_proof', required: true },
   { key: 'liquid_asset_proof', required: true },

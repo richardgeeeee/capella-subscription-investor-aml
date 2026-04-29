@@ -96,6 +96,76 @@ const CORPORATE_FIELDS: SectionDef[] = [
   ]},
 ];
 
+function DocGroup({ title, hint, borderColor, token, documentType, uploadedFiles, onUploaded, lang, addLabel }: {
+  title: string;
+  hint: string;
+  borderColor: string;
+  token: string;
+  documentType: string;
+  uploadedFiles: UploadedFileInfo[];
+  onUploaded: (file: { id: string; originalName: string; fileSize: number; documentType: string }) => void;
+  lang: Language;
+  addLabel: string;
+}) {
+  const [extraSlots, setExtraSlots] = useState(0);
+  const groupFiles = uploadedFiles.filter(f => f.documentType === documentType);
+
+  return (
+    <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-white">
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
+      <p className="text-xs text-gray-500 mb-3">{hint}</p>
+      <div className={`space-y-2 pl-3 border-l-2 ${borderColor}`}>
+        {/* Primary upload slot — always visible */}
+        <FileDropzone
+          token={token}
+          documentType={documentType}
+          label={`${title} *`}
+          required
+          onUploaded={onUploaded}
+          multiple
+        />
+        {/* Uploaded files */}
+        {groupFiles.map(f => (
+          <div key={f.id} className="flex items-center gap-2 text-sm bg-green-50 border border-green-200 rounded px-3 py-2">
+            <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            <span className="truncate flex-1 text-gray-700">{f.originalName}</span>
+            <span className="text-xs text-gray-400 flex-shrink-0">{f.fileSize < 1024 * 1024 ? `${(f.fileSize / 1024).toFixed(0)} KB` : `${(f.fileSize / (1024 * 1024)).toFixed(1)} MB`}</span>
+          </div>
+        ))}
+        {/* Extra upload slots */}
+        {Array.from({ length: extraSlots }).map((_, i) => (
+          <div key={`extra-${i}`} className="flex items-start gap-2">
+            <div className="flex-1">
+              <FileDropzone
+                token={token}
+                documentType={documentType}
+                label={`${lang === 'zh' ? '附件' : 'Attachment'} ${groupFiles.length + i + 2}`}
+                required={false}
+                onUploaded={(file) => { onUploaded(file); setExtraSlots(s => Math.max(0, s - 1)); }}
+                multiple
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setExtraSlots(s => Math.max(0, s - 1))}
+              className="mt-6 text-xs text-red-400 hover:text-red-600"
+            >
+              {lang === 'zh' ? '移除' : 'Remove'}
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setExtraSlots(s => s + 1)}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {addLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function InvestorForm({
   token,
   investorName,
@@ -528,45 +598,30 @@ export function InvestorForm({
           {investorType === 'individual' ? (
             <>
               {/* Passport group */}
-              <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-white">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('doc_group_passport', lang)}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('doc_group_passport_hint', lang)}</p>
-                <div className="space-y-3 pl-2 border-l-2 border-blue-200">
-                  {(['passport_front', 'passport_signature'] as const).map(key => {
-                    const doc = docTypes.find(d => d.key === key)!;
-                    const existingFile = uploadedFiles.find(f => f.documentType === key);
-                    return (
-                      <FileDropzone
-                        key={key}
-                        token={token}
-                        documentType={key}
-                        label={t(key, lang)}
-                        required={doc.required}
-                        existingFile={existingFile ? { id: existingFile.id, originalName: existingFile.originalName, fileSize: existingFile.fileSize } : undefined}
-                        onUploaded={handleFileUploaded}
-                        multiple
-                      />
-                    );
-                  })}
-                </div>
-              </div>
+              <DocGroup
+                title={t('doc_group_passport', lang)}
+                hint={t('doc_group_passport_hint', lang)}
+                borderColor="border-blue-200"
+                token={token}
+                documentType="passport_front"
+                uploadedFiles={uploadedFiles}
+                onUploaded={handleFileUploaded}
+                lang={lang}
+                addLabel={t('add_attachment', lang)}
+              />
 
               {/* ID Card group */}
-              <div className="mb-6 border border-gray-200 rounded-lg p-4 bg-white">
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('doc_group_id', lang)}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('doc_group_id_hint', lang)}</p>
-                <div className="pl-2 border-l-2 border-amber-200">
-                  <FileDropzone
-                    token={token}
-                    documentType="id_card"
-                    label={t('id_card', lang)}
-                    required
-                    existingFile={(() => { const f = uploadedFiles.find(f => f.documentType === 'id_card'); return f ? { id: f.id, originalName: f.originalName, fileSize: f.fileSize } : undefined; })()}
-                    onUploaded={handleFileUploaded}
-                    multiple
-                  />
-                </div>
-              </div>
+              <DocGroup
+                title={t('doc_group_id', lang)}
+                hint={t('doc_group_id_hint', lang)}
+                borderColor="border-amber-200"
+                token={token}
+                documentType="id_card"
+                uploadedFiles={uploadedFiles}
+                onUploaded={handleFileUploaded}
+                lang={lang}
+                addLabel={t('add_attachment', lang)}
+              />
 
               {/* Address proof */}
               <FileDropzone
