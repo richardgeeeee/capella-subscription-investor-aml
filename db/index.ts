@@ -241,6 +241,18 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
   }
 
+  if (!columnExists(db, 'uploaded_files', 'name_verification')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN name_verification TEXT`);
+  }
+
+  // links — legal name (for contracts, distinct from preferred first_name/last_name)
+  if (!columnExists(db, 'links', 'legal_first_name')) {
+    db.exec(`ALTER TABLE links ADD COLUMN legal_first_name TEXT`);
+  }
+  if (!columnExists(db, 'links', 'legal_last_name')) {
+    db.exec(`ALTER TABLE links ADD COLUMN legal_last_name TEXT`);
+  }
+
   // Backfill target_subscription_date and subscription_amount from existing form_data
   const unfilled = db.prepare(`
     SELECT l.id, s.form_data FROM links l
@@ -666,6 +678,8 @@ export function updateLink(id: string, params: {
   investorEmail?: string | null;
   targetSubscriptionDate?: string | null;
   subscriptionAmount?: string | null;
+  legalFirstName?: string | null;
+  legalLastName?: string | null;
 }) {
   const db = getDb();
   const sets: string[] = [];
@@ -680,6 +694,8 @@ export function updateLink(id: string, params: {
   }
   if (params.targetSubscriptionDate !== undefined) { sets.push('target_subscription_date = ?'); values.push(params.targetSubscriptionDate || null); }
   if (params.subscriptionAmount !== undefined) { sets.push('subscription_amount = ?'); values.push(params.subscriptionAmount || null); }
+  if (params.legalFirstName !== undefined) { sets.push('legal_first_name = ?'); values.push(params.legalFirstName || null); }
+  if (params.legalLastName !== undefined) { sets.push('legal_last_name = ?'); values.push(params.legalLastName || null); }
 
   if (sets.length === 0) return;
 
@@ -843,6 +859,8 @@ export interface LinkRow {
   target_subscription_date: string | null;
   subscription_amount: string | null;
   link_category: 'new_subscription' | 'topup';
+  legal_first_name: string | null;
+  legal_last_name: string | null;
 }
 
 export interface LinkEventRow {

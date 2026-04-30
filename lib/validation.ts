@@ -45,6 +45,8 @@ export function amountQualifiesForAssetProofWaiver(raw: string | undefined): boo
 }
 
 export const individualFormSchema = subscriptionSchema.merge(paymentSchema).extend({
+  legalFirstName: z.string().min(1, 'Required'),
+  legalLastName: z.string().min(1, 'Required'),
   dateOfBirth: z.string().min(1, 'Required'),
   cityCountryOfBirth: z.string().min(1, 'Required'),
   nationality: z.string().min(1, 'Required'),
