@@ -618,61 +618,34 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">First Name</label>
-                  <input
-                    type="text"
-                    value={editFirst}
-                    onChange={e => setEditFirst(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                    placeholder="e.g. Jin"
-                  />
+                  <input type="text" value={editFirst} onChange={e => setEditFirst(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. Jin" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Last Name</label>
-                  <input
-                    type="text"
-                    value={editLast}
-                    onChange={e => setEditLast(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                    placeholder="e.g. ZHANG"
-                  />
+                  <input type="text" value={editLast} onChange={e => setEditLast(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. ZHANG" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Share Class</label>
-                  <select
-                    value={editShareClass}
-                    onChange={e => setEditShareClass(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                  >
+                  <select value={editShareClass} onChange={e => setEditShareClass(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
                     <option value="">— None —</option>
                     {SHARE_CLASSES.map(sc => <option key={sc} value={sc}>{sc}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Target Date</label>
-                  <input
-                    type="date"
-                    value={editTargetDate}
-                    onChange={e => setEditTargetDate(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                  />
+                  <input type="date" value={editTargetDate} onChange={e => setEditTargetDate(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Amount (USD)</label>
-                  <input
-                    type="text"
-                    value={editSubAmount}
-                    onChange={e => setEditSubAmount(e.target.value)}
-                    className="w-full border rounded px-2 py-1 text-sm"
-                    placeholder="e.g. 100000"
-                  />
+                  <label className="text-xs text-gray-500 block mb-1">Legal First Name</label>
+                  <input type="text" value={editLegalFirst} onChange={e => setEditLegalFirst(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. Yiting" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Legal Last Name</label>
                   <input type="text" value={editLegalLast} onChange={e => setEditLegalLast(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. CHEN" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Legal First Name</label>
-                  <input type="text" value={editLegalFirst} onChange={e => setEditLegalFirst(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. Yiting" />
+                  <label className="text-xs text-gray-500 block mb-1">Amount (USD)</label>
+                  <input type="text" value={editSubAmount} onChange={e => setEditSubAmount(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. 100000" />
                 </div>
                 <div className="col-span-2 md:col-span-4">
                   <label className="text-xs text-gray-500 block mb-1">Investor Email</label>
