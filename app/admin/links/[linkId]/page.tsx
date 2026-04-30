@@ -32,6 +32,14 @@ interface AddressVerification {
   checked_at: string;
 }
 
+interface NameVerification {
+  status: 'pending' | 'matched' | 'mismatched' | 'failed' | 'skipped';
+  legal_name: string;
+  extracted_name: string;
+  reason: string;
+  checked_at: string;
+}
+
 interface FileData {
   id: string;
   document_type: string;
@@ -42,6 +50,7 @@ interface FileData {
   uploaded_at: string;
   drive_sync_status: string;
   address_verification: AddressVerification | null;
+  name_verification: NameVerification | null;
   payment_extraction: { records: Array<{ amount: string; currency: string; date: string; payer: string }>; error?: string; checked_at?: string } | null;
 }
 
@@ -102,6 +111,7 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   payment_extracted:    { label: 'Payment info extracted',    color: 'bg-indigo-100 text-indigo-700',   icon: '💳' },
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
   address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
+  name_verified:        { label: 'Name verification',        color: 'bg-teal-100 text-teal-700',       icon: '👤' },
   certified_copy_generated: { label: 'Certified copy generated', color: 'bg-cyan-100 text-cyan-700', icon: '📜' },
   certified_copy_deleted:   { label: 'Certified copy deleted',   color: 'bg-gray-100 text-gray-700', icon: '🗑️' },
   certified_copy_synced:    { label: 'Certified copy synced',    color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
@@ -130,6 +140,10 @@ function renderEventDetail(ev: TimelineEvent): string {
       return Object.keys(changes).map(k => `${k}: ${formatVal(changes[k].from)} → ${formatVal(changes[k].to)}`).join('; ');
     }
     case 'address_verified': return `${d.status || '?'}${d.reason ? ' — ' + d.reason : ''}`;
+    case 'name_verified': {
+      const nr = Array.isArray(d.results) ? d.results : [];
+      return nr.map((r: Record<string, unknown>) => `${r.status}`).join(', ') || '';
+    }
     case 'payment_extracted': return `${d.records} record${d.records === 1 ? '' : 's'}${d.error ? ' — ' + d.error : ''}`;
     case 'drive_folder_stale': return String(d.message || 'Original folder was deleted');
     case 'drive_folder_resolved': return d.folderId ? `Linked to folder ${d.folderId}` : 'New folder will be created';
@@ -240,6 +254,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [resendResult, setResendResult] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [verifyingAddress, setVerifyingAddress] = useState(false);
+  const [verifyingName, setVerifyingName] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ id: string; name: string; mimeType: string } | null>(null);
   const autoVerifyTriggered = useRef(false);
   const { confirm, alert } = useDialog();
@@ -420,6 +435,25 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       fetchData();
     } finally {
       setVerifyingAddress(false);
+    }
+  };
+
+  const handleVerifyName = async () => {
+    setVerifyingName(true);
+    try {
+      const res = await fetch('/api/admin/verify-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        await alert({ title: 'Name verification failed', message: data.error || 'Unknown error', variant: 'error' });
+        return;
+      }
+      fetchData();
+    } finally {
+      setVerifyingName(false);
     }
   };
 
@@ -1264,6 +1298,19 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                       {av?.status === 'pending' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Verifying…</span>}
                       {av?.status === 'failed' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">Verification failed</span>}
                       {av?.status === 'skipped' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">Skipped</span>}
+                      {file.name_verification?.status === 'matched' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Name matched
+                        </span>
+                      )}
+                      {file.name_verification?.status === 'mismatched' && (
+                        <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          Name mismatch
+                        </span>
+                      )}
+                      {file.name_verification?.status === 'pending' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Verifying name…</span>}
                     </p>
                     <p className="text-xs text-gray-500">
                       {file.document_type} &middot; {formatSize(file.file_size)} &middot; {new Date(file.uploaded_at).toLocaleString()}
@@ -1346,7 +1393,16 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                   {/* 1. Identity documents */}
                   {identityFiles.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Passport & ID Documents</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Passport & ID Documents</h3>
+                        <button
+                          onClick={handleVerifyName}
+                          disabled={verifyingName}
+                          className="text-xs px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 text-gray-700"
+                        >
+                          {verifyingName ? 'Verifying…' : 'Verify Legal Name'}
+                        </button>
+                      </div>
                       <div className="space-y-2">{identityFiles.map(renderFileRow)}</div>
                     </div>
                   )}

@@ -241,6 +241,10 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
   }
 
+  if (!columnExists(db, 'uploaded_files', 'name_verification')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN name_verification TEXT`);
+  }
+
   // links — legal name (for contracts, distinct from preferred first_name/last_name)
   if (!columnExists(db, 'links', 'legal_first_name')) {
     db.exec(`ALTER TABLE links ADD COLUMN legal_first_name TEXT`);
