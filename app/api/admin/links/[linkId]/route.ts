@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const body = await request.json();
-  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount } = body;
+  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount, legalFirstName, legalLastName } = body;
 
   if (shareClass !== undefined && shareClass !== null && shareClass !== '' && !SHARE_CLASSES.includes(shareClass)) {
     return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
@@ -43,6 +43,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
     investorEmail: investorEmail !== undefined ? investorEmail : undefined,
     targetSubscriptionDate: targetSubscriptionDate !== undefined ? targetSubscriptionDate : undefined,
     subscriptionAmount: subscriptionAmount !== undefined ? subscriptionAmount : undefined,
+    legalFirstName: legalFirstName !== undefined ? legalFirstName : undefined,
+    legalLastName: legalLastName !== undefined ? legalLastName : undefined,
   });
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -52,6 +54,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   if (investorEmail !== undefined && (investorEmail || null) !== link.investor_email) changes.investorEmail = { from: link.investor_email, to: investorEmail };
   if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== link.target_subscription_date) changes.targetSubscriptionDate = { from: link.target_subscription_date, to: targetSubscriptionDate };
   if (subscriptionAmount !== undefined && subscriptionAmount !== link.subscription_amount) changes.subscriptionAmount = { from: link.subscription_amount, to: subscriptionAmount };
+  if (legalFirstName !== undefined && legalFirstName !== link.legal_first_name) changes.legalFirstName = { from: link.legal_first_name, to: legalFirstName };
+  if (legalLastName !== undefined && legalLastName !== link.legal_last_name) changes.legalLastName = { from: link.legal_last_name, to: legalLastName };
   if (Object.keys(changes).length > 0) {
     const admin = await getAdminSession();
     logLinkEvent(linkId, 'admin_edit', { changes, actor: admin?.name || 'Admin' });

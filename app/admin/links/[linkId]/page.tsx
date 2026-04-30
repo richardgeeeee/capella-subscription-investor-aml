@@ -59,6 +59,8 @@ interface LinkDetail {
   created_at: string;
   target_subscription_date: string | null;
   subscription_amount: string | null;
+  legal_first_name: string | null;
+  legal_last_name: string | null;
 }
 
 interface CertifiedCopy {
@@ -227,6 +229,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [editEmail, setEditEmail] = useState('');
   const [editTargetDate, setEditTargetDate] = useState('');
   const [editSubAmount, setEditSubAmount] = useState('');
+  const [editLegalFirst, setEditLegalFirst] = useState('');
+  const [editLegalLast, setEditLegalLast] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -329,6 +333,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     setEditEmail(link.investor_email || '');
     setEditTargetDate(link.target_subscription_date || '');
     setEditSubAmount(link.subscription_amount || '');
+    setEditLegalFirst(link.legal_first_name || '');
+    setEditLegalLast(link.legal_last_name || '');
     setSaveError(null);
     setEditing(true);
   };
@@ -347,6 +353,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
           investorEmail: editEmail || null,
           targetSubscriptionDate: editTargetDate || null,
           subscriptionAmount: editSubAmount || null,
+          legalFirstName: editLegalFirst || null,
+          legalLastName: editLegalLast || null,
         }),
       });
       const data = await res.json();
@@ -624,6 +632,14 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     placeholder="e.g. 100000"
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Legal Last Name</label>
+                  <input type="text" value={editLegalLast} onChange={e => setEditLegalLast(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. CHEN" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Legal First Name</label>
+                  <input type="text" value={editLegalFirst} onChange={e => setEditLegalFirst(e.target.value)} className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. Yiting" />
+                </div>
                 <div className="col-span-2 md:col-span-4">
                   <label className="text-xs text-gray-500 block mb-1">Investor Email</label>
                   <input
@@ -656,9 +672,17 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
                 <div>
-                  <p className="text-xs text-gray-500">First / Last Name</p>
+                  <p className="text-xs text-gray-500">Preferred Name</p>
                   <p className="font-medium text-gray-900">
-                    {link.first_name || '?'} / {link.last_name || '?'}
+                    {link.first_name || '?'} {link.last_name || '?'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Legal Name</p>
+                  <p className="font-medium text-gray-900">
+                    {link.legal_last_name && link.legal_first_name
+                      ? `${link.legal_last_name.toUpperCase()} ${link.legal_first_name}`
+                      : <span className="text-gray-400">(pending investor input)</span>}
                   </p>
                 </div>
                 <div>
