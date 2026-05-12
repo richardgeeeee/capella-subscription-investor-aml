@@ -19,29 +19,47 @@ const monthEndDate = z.string().min(1, 'Required').refine((value) => {
   return y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1);
 }, 'Subscription date cannot be in the past');
 
-/** Accepts "100000", "100,000", "$100,000", "100000.00" etc. */
-function parseAmount(raw: string): number {
-  const cleaned = raw.replace(/[^0-9.]/g, '');
-  if (!cleaned) return NaN;
-  return Number(cleaned);
+/** Only digits allowed — returns integer or NaN */
+function parseIntegerAmount(raw: string): number {
+  if (!/^\d+$/.test(raw.trim())) return NaN;
+  return Number(raw.trim());
 }
 
-const subscriptionAmount = z.string().min(1, 'Required').refine((value) => {
-  const n = parseAmount(value);
-  return !isNaN(n) && n >= 100_000;
-}, 'Amount must be at least USD 100,000');
+const newSubscriptionAmount = z.string().min(1, 'Required').refine((value) => {
+  return /^\d+$/.test(value.trim());
+}, 'Must be a whole number (no decimals, commas, or symbols)').refine((value) => {
+  const n = parseIntegerAmount(value);
+  return !isNaN(n) && n >= 500_000;
+}, 'Minimum subscription amount is USD 500,000').refine((value) => {
+  const n = parseIntegerAmount(value);
+  return !isNaN(n) && n % 100 === 0;
+}, 'Amount must be in increments of USD 100');
+
+const topupSubscriptionAmount = z.string().min(1, 'Required').refine((value) => {
+  return /^\d+$/.test(value.trim());
+}, 'Must be a whole number (no decimals, commas, or symbols)').refine((value) => {
+  const n = parseIntegerAmount(value);
+  return !isNaN(n) && n >= 300_000;
+}, 'Minimum top-up amount is USD 300,000').refine((value) => {
+  const n = parseIntegerAmount(value);
+  return !isNaN(n) && n % 100 === 0;
+}, 'Amount must be in increments of USD 100');
 
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),
   shareClass: z.string().optional().default(''),
   subscriptionDate: monthEndDate,
-  subscriptionAmount,
+  subscriptionAmount: newSubscriptionAmount,
 });
 
 export function amountQualifiesForAssetProofWaiver(raw: string | undefined): boolean {
   if (!raw) return false;
-  const n = parseAmount(raw);
-  return !isNaN(n) && n > 1_000_000;
+  const n = parseIntegerAmount(raw);
+  if (isNaN(n)) {
+    const cleaned = raw.replace(/[^0-9.]/g, '');
+    return cleaned ? Number(cleaned) > 1_000_000 : false;
+  }
+  return n > 1_000_000;
 }
 
 export const individualFormSchema = subscriptionSchema.merge(paymentSchema).extend({
@@ -80,7 +98,7 @@ export const topupFormSchema = z.object({
   investorName: z.string().min(1),
   shareClass: z.string().optional().default(''),
   subscriptionDate: monthEndDate,
-  subscriptionAmount,
+  subscriptionAmount: topupSubscriptionAmount,
 });
 
 // Draft validation is more lenient - allows empty fields
