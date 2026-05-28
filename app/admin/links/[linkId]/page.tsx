@@ -235,6 +235,8 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [syncingCert, setSyncingCert] = useState<string | null>(null);
   const [selectedForCert, setSelectedForCert] = useState<Set<string>>(new Set());
 
+  const [extractingAll, setExtractingAll] = useState(false);
+
   // Inline edit state
   const [editing, setEditing] = useState(false);
   const [editFirst, setEditFirst] = useState('');
@@ -1405,12 +1407,77 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
                     </div>
                   )}
 
-                  {/* 4. Payment proof + admin upload */}
+                  {/* 4. Payment proof + summary + admin upload */}
                   <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Proof</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment Proof</h3>
+                      {paymentFiles.length > 0 && (() => {
+                        const unextracted = paymentFiles.filter(f => !f.payment_extraction);
+                        return unextracted.length > 0 ? (
+                          <button
+                            onClick={async () => {
+                              setExtractingAll(true);
+                              try {
+                                for (const f of unextracted) {
+                                  await fetch('/api/admin/extract-payment', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ fileId: f.id }),
+                                  });
+                                }
+                                fetchData();
+                              } finally { setExtractingAll(false); }
+                            }}
+                            disabled={extractingAll}
+                            className="text-xs px-3 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 text-gray-700"
+                          >
+                            {extractingAll ? 'Extracting…' : `Extract All (${unextracted.length} pending)`}
+                          </button>
+                        ) : null;
+                      })()}
+                    </div>
                     {paymentFiles.length > 0 && (
                       <div className="space-y-2 mb-3">{paymentFiles.map(renderFileRow)}</div>
                     )}
+
+                    {/* Payment summary: total extracted vs subscription amount */}
+                    {paymentFiles.length > 0 && (() => {
+                      const extractedAmounts = paymentFiles
+                        .filter(f => f.payment_extraction?.records && f.payment_extraction.records.length > 0)
+                        .flatMap(f => f.payment_extraction!.records);
+                      const totalExtracted = extractedAmounts.reduce((sum, r) => {
+                        const n = parseFloat(r.amount.replace(/[^0-9.]/g, ''));
+                        return sum + (isNaN(n) ? 0 : n);
+                      }, 0);
+                      const subAmount = parseFloat((link.subscription_amount || '0').replace(/[^0-9.]/g, ''));
+                      const difference = subAmount - totalExtracted;
+                      const allExtracted = paymentFiles.every(f => f.payment_extraction);
+
+                      if (!allExtracted && extractedAmounts.length === 0) return null;
+
+                      return (
+                        <div className={`p-3 rounded-lg border mb-3 ${difference <= 0 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                            <span className="text-gray-600">
+                              Extracted total: <strong className="text-gray-900">${totalExtracted.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</strong>
+                              <span className="text-xs text-gray-400 ml-1">({extractedAmounts.length} record{extractedAmounts.length !== 1 ? 's' : ''})</span>
+                            </span>
+                            <span className="text-gray-600">
+                              Subscription amount: <strong className="text-gray-900">${subAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</strong>
+                            </span>
+                            {difference > 0 ? (
+                              <span className="text-amber-700 font-medium">
+                                Shortfall: ${difference.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : (
+                              <span className="text-green-700 font-medium">
+                                {difference === 0 ? 'Fully matched' : `Over by $${Math.abs(difference).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <input
                       id="admin-payment-upload"
                       type="file"
