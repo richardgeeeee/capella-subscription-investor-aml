@@ -255,6 +255,14 @@ function runMigrations(db: Database.Database) {
   if (!columnExists(db, 'links', 'admin_notes')) {
     db.exec(`ALTER TABLE links ADD COLUMN admin_notes TEXT`);
   }
+  if (!columnExists(db, 'links', 'track_asset_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_asset_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_address_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_address_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_identity_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_identity_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_payment_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_payment_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_sub_docs')) db.exec(`ALTER TABLE links ADD COLUMN track_sub_docs INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_sub_docs_signed')) db.exec(`ALTER TABLE links ADD COLUMN track_sub_docs_signed INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_payment_received')) db.exec(`ALTER TABLE links ADD COLUMN track_payment_received TEXT`);
+  if (!columnExists(db, 'links', 'track_status')) db.exec(`ALTER TABLE links ADD COLUMN track_status TEXT`);
 
   // Backfill target_subscription_date and subscription_amount from existing form_data
   const unfilled = db.prepare(`
@@ -717,6 +725,13 @@ export function updateLink(id: string, params: {
   return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
+export function updateLinkTracking(id: string, field: string, value: string | number) {
+  const db = getDb();
+  const allowed = ['track_asset_proof', 'track_address_proof', 'track_identity_proof', 'track_payment_proof', 'track_sub_docs', 'track_sub_docs_signed', 'track_payment_received', 'track_status'];
+  if (!allowed.includes(field)) return;
+  db.prepare(`UPDATE links SET ${field} = ? WHERE id = ?`).run(value, id);
+}
+
 export function updateLinkNotes(id: string, notes: string) {
   const db = getDb();
   return db.prepare('UPDATE links SET admin_notes = ? WHERE id = ?').run(notes, id);
@@ -870,6 +885,14 @@ export interface LinkRow {
   legal_first_name: string | null;
   legal_last_name: string | null;
   admin_notes: string | null;
+  track_asset_proof: number;
+  track_address_proof: number;
+  track_identity_proof: number;
+  track_payment_proof: number;
+  track_sub_docs: number;
+  track_sub_docs_signed: number;
+  track_payment_received: string | null;
+  track_status: string | null;
 }
 
 export interface LinkEventRow {

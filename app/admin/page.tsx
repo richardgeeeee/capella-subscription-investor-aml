@@ -26,6 +26,14 @@ interface LinkData {
   payment_proof_count: number;
   recent_event_count: number;
   admin_notes: string | null;
+  track_asset_proof: number;
+  track_address_proof: number;
+  track_identity_proof: number;
+  track_payment_proof: number;
+  track_sub_docs: number;
+  track_sub_docs_signed: number;
+  track_payment_received: string | null;
+  track_status: string | null;
 }
 
 interface ExistingInvestor {
@@ -50,6 +58,72 @@ function parseAmount(raw: string | null): number {
   if (!raw) return 0;
   const n = Number(raw.replace(/[^0-9.]/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+function TrackCheckbox({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: number }) {
+  const [checked, setChecked] = useState(!!initialValue);
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => {
+        setChecked(e.target.checked);
+        fetch(`/api/admin/links/${linkId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackField: field, trackValue: e.target.checked ? 1 : 0 }),
+        });
+      }}
+      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    />
+  );
+}
+
+function TrackSelect({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value);
+        fetch(`/api/admin/links/${linkId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackField: field, trackValue: e.target.value }),
+        });
+      }}
+      className="text-[11px] border-0 bg-transparent text-gray-600 focus:ring-0 px-0 py-0 cursor-pointer"
+    >
+      <option value="">—</option>
+      <option value="sent">sent</option>
+      <option value="signed">signed</option>
+      <option value="finalized">finalized</option>
+    </select>
+  );
+}
+
+function TrackText({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+          fetch(`/api/admin/links/${linkId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackField: field, trackValue: e.target.value }),
+          });
+        }, 800);
+      }}
+      placeholder="—"
+      className="w-full text-[11px] bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:ring-0 px-0 py-0 text-gray-700 placeholder-gray-300 outline-none"
+    />
+  );
 }
 
 function NotesCell({ linkId, initialValue }: { linkId: string; initialValue: string }) {
@@ -608,7 +682,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Loading...</p>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-sm min-w-[900px]">
+            <table className="w-full text-sm min-w-[1200px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
@@ -616,10 +690,15 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('target_subscription_date')}>Target Date{sortIcon('target_subscription_date')}</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('subscription_amount')}>Amount{sortIcon('subscription_amount')}</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Payment</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('created_at')}>Created{sortIcon('created_at')}</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium min-w-[180px]">Notes</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Identity Proof">ID</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Address Proof">Addr</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Asset Proof">Asset</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Payment Proof">Pay</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Subscription Docs">Sub</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Subscription Docs Signed">Signed</th>
+                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px] min-w-[80px]" title="Payment Received">Received</th>
+                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px]">Status</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium min-w-[150px]">Notes</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -627,7 +706,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const now = new Date();
                   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                  const colCount = 10;
+                  const colCount = 15;
                   let lastGroup = '';
                   const rows: React.ReactNode[] = [];
 
@@ -680,13 +759,14 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-gray-600 text-xs">{link.share_class || '-'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{link.target_subscription_date || '-'}</td>
                       <td className="px-4 py-3 text-right text-gray-600 text-xs whitespace-nowrap">{link.subscription_amount ? `$${parseAmount(link.subscription_amount).toLocaleString()}` : '-'}</td>
-                      <td className="px-4 py-3">{getStatusBadge(link)}</td>
-                      <td className="px-4 py-3">
-                        {(link.payment_proof_count || 0) > 0
-                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">Uploaded {link.payment_proof_count}</span>
-                          : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{new Date(link.created_at).toLocaleDateString()}</td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_identity_proof" initialValue={link.track_identity_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_address_proof" initialValue={link.track_address_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_asset_proof" initialValue={link.track_asset_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_payment_proof" initialValue={link.track_payment_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_sub_docs" initialValue={link.track_sub_docs} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_sub_docs_signed" initialValue={link.track_sub_docs_signed} /></td>
+                      <td className="px-2 py-3" onClick={e => e.stopPropagation()}><TrackText linkId={link.id} field="track_payment_received" initialValue={link.track_payment_received || ''} /></td>
+                      <td className="px-2 py-3" onClick={e => e.stopPropagation()}><TrackSelect linkId={link.id} field="track_status" initialValue={link.track_status || ''} /></td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <NotesCell linkId={link.id} initialValue={link.admin_notes || ''} />
                       </td>
@@ -717,7 +797,7 @@ export default function AdminDashboard() {
                 })()}
                 {filteredLinks.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={15} className="px-4 py-8 text-center text-gray-500">
                       {links.length === 0 ? 'No investor links yet.' : 'No matches for current filters.'}
                     </td>
                   </tr>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink, updateLinkNotes, deleteLink, logLinkEvent } from '@/db';
+import { getLinkById, updateLink, updateLinkNotes, updateLinkTracking, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -23,6 +23,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   // Quick path: notes-only update (no audit log needed)
   if (adminNotes !== undefined && Object.keys(body).length <= 2) {
     updateLinkNotes(linkId, adminNotes || '');
+    return NextResponse.json({ success: true });
+  }
+
+  // Quick path: tracking field update
+  const { trackField, trackValue } = body;
+  if (trackField !== undefined) {
+    updateLinkTracking(linkId, trackField, trackValue);
     return NextResponse.json({ success: true });
   }
 
