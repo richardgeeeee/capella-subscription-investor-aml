@@ -252,6 +252,9 @@ function runMigrations(db: Database.Database) {
   if (!columnExists(db, 'links', 'legal_last_name')) {
     db.exec(`ALTER TABLE links ADD COLUMN legal_last_name TEXT`);
   }
+  if (!columnExists(db, 'links', 'admin_notes')) {
+    db.exec(`ALTER TABLE links ADD COLUMN admin_notes TEXT`);
+  }
 
   // Backfill target_subscription_date and subscription_amount from existing form_data
   const unfilled = db.prepare(`
@@ -714,6 +717,11 @@ export function updateLink(id: string, params: {
   return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
+export function updateLinkNotes(id: string, notes: string) {
+  const db = getDb();
+  return db.prepare('UPDATE links SET admin_notes = ? WHERE id = ?').run(notes, id);
+}
+
 export function getDistinctInvestors() {
   const db = getDb();
   return db.prepare(`
@@ -861,6 +869,7 @@ export interface LinkRow {
   link_category: 'new_subscription' | 'topup';
   legal_first_name: string | null;
   legal_last_name: string | null;
+  admin_notes: string | null;
 }
 
 export interface LinkEventRow {

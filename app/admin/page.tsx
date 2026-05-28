@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { SHARE_CLASSES, type ShareClass } from '@/lib/constants';
 import { useDialog } from '@/components/Dialog';
@@ -25,6 +25,7 @@ interface LinkData {
   link_category: string;
   payment_proof_count: number;
   recent_event_count: number;
+  admin_notes: string | null;
 }
 
 interface ExistingInvestor {
@@ -49,6 +50,57 @@ function parseAmount(raw: string | null): number {
   if (!raw) return 0;
   const n = Number(raw.replace(/[^0-9.]/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+function NotesCell({ linkId, initialValue }: { linkId: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  const [savedValue, setSavedValue] = useState(initialValue);
+  const [showUndo, setShowUndo] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const save = useCallback((text: string) => {
+    fetch(`/api/admin/links/${linkId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminNotes: text }),
+    });
+  }, [linkId]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const prev = savedValue;
+    const next = e.target.value;
+    setValue(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setSavedValue(prev);
+      save(next);
+      setShowUndo(true);
+      setTimeout(() => setShowUndo(false), 4000);
+    }, 800);
+  };
+
+  const handleUndo = () => {
+    setValue(savedValue);
+    save(savedValue);
+    setShowUndo(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        placeholder="Add note..."
+        className="w-full text-xs bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:ring-0 px-1 py-0.5 text-gray-700 placeholder-gray-300 outline-none"
+      />
+      {showUndo && (
+        <button onClick={handleUndo} className="text-[10px] text-blue-600 hover:text-blue-800 whitespace-nowrap flex-shrink-0">
+          undo
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function AdminDashboard() {
@@ -539,6 +591,7 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Payment</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('created_at')}>Created{sortIcon('created_at')}</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium min-w-[180px]">Notes</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -578,6 +631,9 @@ export default function AdminDashboard() {
                           : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{new Date(link.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <NotesCell linkId={link.id} initialValue={link.admin_notes || ''} />
+                      </td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {link.investor_email && (

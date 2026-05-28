@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink, deleteLink, logLinkEvent } from '@/db';
+import { getLinkById, updateLink, updateLinkNotes, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -18,7 +18,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const body = await request.json();
-  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount, legalFirstName, legalLastName } = body;
+  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount, legalFirstName, legalLastName, adminNotes } = body;
+
+  // Quick path: notes-only update (no audit log needed)
+  if (adminNotes !== undefined && Object.keys(body).length <= 2) {
+    updateLinkNotes(linkId, adminNotes || '');
+    return NextResponse.json({ success: true });
+  }
 
   if (shareClass !== undefined && shareClass !== null && shareClass !== '' && !SHARE_CLASSES.includes(shareClass)) {
     return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
