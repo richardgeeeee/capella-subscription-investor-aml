@@ -320,15 +320,43 @@ export default function AdminDashboard() {
     if (filterCategory !== 'all') result = result.filter(l => (l.link_category || 'new_subscription') === filterCategory);
     if (filterStatus !== 'all') result = result.filter(l => getStatusKey(l) === filterStatus);
     if (filterDate) result = result.filter(l => l.target_subscription_date?.startsWith(filterDate));
-    result.sort((a, b) => {
-      let va: string | number = '', vb: string | number = '';
-      if (sortField === 'created_at') { va = a.created_at; vb = b.created_at; }
-      else if (sortField === 'target_subscription_date') { va = a.target_subscription_date || ''; vb = b.target_subscription_date || ''; }
-      else if (sortField === 'subscription_amount') { va = parseAmount(a.subscription_amount); vb = parseAmount(b.subscription_amount); }
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
+
+    if (sortField === 'created_at' && sortDir === 'desc') {
+      // Default sort: group by month (current → future → historical), within each month new before topup
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const getMonth = (l: LinkData) => l.target_subscription_date?.slice(0, 7) || '9999-99';
+      const getCat = (l: LinkData) => (l.link_category || 'new_subscription') === 'topup' ? 1 : 0;
+      const getGroupOrder = (month: string) => {
+        if (month === currentMonth) return 0; // current month first
+        if (month > currentMonth) return 1;   // future months second
+        return 2;                              // historical last
+      };
+
+      result.sort((a, b) => {
+        const ma = getMonth(a), mb = getMonth(b);
+        const ga = getGroupOrder(ma), gb = getGroupOrder(mb);
+        if (ga !== gb) return ga - gb;
+        // Within same group: current month desc isn't needed, future asc, historical desc
+        if (ga === 1) { if (ma !== mb) return ma.localeCompare(mb); } // future: nearest first
+        else { if (ma !== mb) return mb.localeCompare(ma); } // current & historical: newest first
+        // Within same month: new investors first, then topup
+        const ca = getCat(a), cb = getCat(b);
+        if (ca !== cb) return ca - cb;
+        // Within same category: by created_at desc
+        return b.created_at.localeCompare(a.created_at);
+      });
+    } else {
+      result.sort((a, b) => {
+        let va: string | number = '', vb: string | number = '';
+        if (sortField === 'created_at') { va = a.created_at; vb = b.created_at; }
+        else if (sortField === 'target_subscription_date') { va = a.target_subscription_date || ''; vb = b.target_subscription_date || ''; }
+        else if (sortField === 'subscription_amount') { va = parseAmount(a.subscription_amount); vb = parseAmount(b.subscription_amount); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
     return result;
   }, [links, filterCategory, filterStatus, filterDate, sortField, sortDir]);
 
@@ -596,10 +624,38 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredLinks.map((link) => {
+                {(() => {
+                  const now = new Date();
+                  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                  const colCount = 10;
+                  let lastGroup = '';
+                  const rows: React.ReactNode[] = [];
+
+                  for (const link of filteredLinks) {
+                    const month = link.target_subscription_date?.slice(0, 7) || '';
+                    let group = '';
+                    if (month === currentMonth) group = 'current';
+                    else if (month > currentMonth) group = 'future';
+                    else group = 'historical';
+
+                    if (sortField === 'created_at' && sortDir === 'desc' && group !== lastGroup) {
+                      const label = group === 'current' ? `Current Month (${currentMonth})`
+                        : group === 'future' ? 'Future Investments'
+                        : 'Historical';
+                      const bg = group === 'current' ? 'bg-blue-50 text-blue-800'
+                        : group === 'future' ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-gray-100 text-gray-600';
+                      rows.push(
+                        <tr key={`group-${group}`}>
+                          <td colSpan={colCount} className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider ${bg}`}>{label}</td>
+                        </tr>
+                      );
+                      lastGroup = group;
+                    }
+
                   const cat = link.link_category || 'new_subscription';
                   const hasEvents = (link.recent_event_count || 0) > 0;
-                  return (
+                  rows.push(
                     <tr
                       key={link.id}
                       className={`hover:bg-gray-50 cursor-pointer ${hasEvents ? 'bg-yellow-50' : ''}`}
@@ -656,10 +712,12 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   );
-                })}
+                  }
+                  return rows;
+                })()}
                 {filteredLinks.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
                       {links.length === 0 ? 'No investor links yet.' : 'No matches for current filters.'}
                     </td>
                   </tr>
