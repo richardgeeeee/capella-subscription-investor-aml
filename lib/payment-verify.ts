@@ -1,19 +1,6 @@
 import './canvas-polyfill';
 import fs from 'fs';
-
-/**
- * Payment proof extraction: reads transfer amount, date, and payer
- * from uploaded payment proof documents (PDF or image).
- *
- * Uses MiniMax VLM for images, MiniMax Anthropic for PDF text,
- * with Gemini as optional fallback for vision.
- */
-
-function getAnthropicEndpoint(): string {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  return `${origin}/anthropic/v1/messages`;
-}
+import { callVisionApi, callTextApi, isVisionConfigured } from './vision-api';
 
 export interface PaymentRecord {
   amount: string;
@@ -44,70 +31,12 @@ Respond with ONLY a JSON object (no markdown, no prose) in this exact shape:
 If you cannot find payment information, respond with:
 {"records": [], "error": "reason"}`;
 
-async function callAnthropicForPayment(
-  userContent: string | Array<Record<string, unknown>>
-): Promise<string> {
-  const endpoint = getAnthropicEndpoint();
-  const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.LLM_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2048,
-      system: PAYMENT_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`LLM API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  const blocks = Array.isArray(result.content) ? result.content : [];
-  const textBlock = blocks.find((b: Record<string, unknown>) => b.type === 'text');
-  return (textBlock?.text as string) || '';
-}
-
-async function callVLMForPayment(base64: string, mimeType: string): Promise<string> {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  const endpoint = `${origin}/v1/coding_plan/vlm`;
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      prompt: PAYMENT_PROMPT + '\n\nAnalyze the attached document and respond with the JSON.',
-      image_url: `data:${mimeType};base64,${base64}`,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`VLM API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  return result.content || '';
-}
-
 export async function extractPaymentInfo(
   filePath: string,
   mimeType: string
 ): Promise<PaymentExtractionResult> {
-  if (!process.env.LLM_API_KEY || !process.env.LLM_BASE_URL) {
-    return { records: [], error: 'LLM not configured' };
+  if (!isVisionConfigured()) {
+    return { records: [], error: 'No vision/LLM API configured' };
   }
 
   try {
@@ -123,48 +52,17 @@ export async function extractPaymentInfo(
 }
 
 async function extractFromImage(base64: string, mimeType: string): Promise<PaymentExtractionResult> {
-  // Try MiniMax VLM first
   try {
-    const text = await callVLMForPayment(base64, mimeType);
+    const text = await callVisionApi(PAYMENT_PROMPT, 'Extract payment information from this document.', base64, mimeType);
     return parsePaymentResult(text);
   } catch (err) {
-    console.warn('[payment] VLM failed:', err instanceof Error ? err.message : err);
+    return { records: [], error: `Image extraction failed: ${err instanceof Error ? err.message : String(err)}` };
   }
-
-  // Fallback: external vision (Gemini)
-  if (process.env.VISION_API_KEY) {
-    try {
-      const apiKey = process.env.VISION_API_KEY;
-      const baseUrl = process.env.VISION_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai';
-      const model = process.env.VISION_MODEL || 'gemini-2.0-flash';
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model, max_tokens: 1024,
-          messages: [
-            { role: 'system', content: PAYMENT_PROMPT },
-            { role: 'user', content: [
-              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-              { type: 'text', text: 'Extract payment information from this document.' },
-            ]},
-          ],
-        }),
-      });
-      if (response.ok) {
-        const result = await response.json();
-        return parsePaymentResult(result.choices?.[0]?.message?.content || '');
-      }
-    } catch { /* fall through */ }
-  }
-
-  return { records: [], error: 'Image extraction failed' };
 }
 
 async function extractFromPdf(filePath: string): Promise<PaymentExtractionResult> {
   const buffer = fs.readFileSync(filePath);
 
-  // Try text extraction
   let text = '';
   try {
     const { PDFParse } = await import('pdf-parse');
@@ -178,21 +76,34 @@ async function extractFromPdf(filePath: string): Promise<PaymentExtractionResult
 
   if (text.length >= 30) {
     const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
-    const responseText = await callAnthropicForPayment(
+    const responseText = await callTextApi(
+      PAYMENT_PROMPT,
       `Extracted text from the payment proof document:\n"""\n${truncated}\n"""\n\nExtract payment information.`
     );
     return parsePaymentResult(responseText);
   }
 
-  // Scanned PDF — render to image
+  // Scanned PDF — render to image via pdftoppm
   try {
-    const { pdf: pdfToImg } = await import('pdf-to-img');
-    const doc = await pdfToImg(buffer, { scale: 2 });
-    const pageImage = await doc.getPage(1);
-    return extractFromImage(pageImage.toString('base64'), 'image/png');
+    const { execSync } = await import('child_process');
+    const os = await import('os');
+    const path = await import('path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'payment-'));
+    try {
+      execSync(`pdftoppm -png -r 200 -f 1 -l 1 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 15000 });
+      const pngs = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png'));
+      if (pngs.length > 0) {
+        const imgBuf = fs.readFileSync(path.join(tmpDir, pngs[0]));
+        return await extractFromImage(imgBuf.toString('base64'), 'image/png');
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   } catch (err) {
     return { records: [], error: `PDF processing failed: ${err instanceof Error ? err.message : String(err)}` };
   }
+
+  return { records: [], error: 'PDF has no extractable text and image render failed' };
 }
 
 function parsePaymentResult(raw: string): PaymentExtractionResult {

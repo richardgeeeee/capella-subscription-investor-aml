@@ -1,11 +1,6 @@
 import './canvas-polyfill';
 import fs from 'fs';
-
-function getAnthropicEndpoint(): string {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  return `${origin}/anthropic/v1/messages`;
-}
+import { callVisionApi, isVisionConfigured } from './vision-api';
 
 export interface NameVerifyResult {
   match: boolean;
@@ -31,150 +26,49 @@ export async function verifyNameAgainstDocument(
   mimeType: string,
   legalName: string
 ): Promise<NameVerifyResult> {
-  if (!process.env.LLM_API_KEY || !process.env.LLM_BASE_URL) {
-    throw new Error('LLM_API_KEY and LLM_BASE_URL must be configured');
+  if (!isVisionConfigured()) {
+    throw new Error('No vision API configured (set VISION_API_KEY + VISION_BASE_URL)');
   }
 
-  const isPdf = mimeType === 'application/pdf';
   const isImage = mimeType.startsWith('image/');
+  const isPdf = mimeType === 'application/pdf';
 
-  if (isImage) return verifyImageViaVision(fs.readFileSync(filePath).toString('base64'), mimeType, legalName);
+  if (isImage) return verifyImage(fs.readFileSync(filePath).toString('base64'), mimeType, legalName);
   if (isPdf) return verifyPdf(filePath, legalName);
 
-  return {
-    match: false,
-    extracted_name: '',
-    reason: `Unsupported file type: ${mimeType}`,
-    skipped: true,
-  };
+  return { match: false, extracted_name: '', reason: `Unsupported file type: ${mimeType}`, skipped: true };
 }
 
-async function callMiniMaxVLM(base64: string, mimeType: string, prompt: string): Promise<string> {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  const endpoint = `${origin}/v1/coding_plan/vlm`;
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({ prompt, image_url: `data:${mimeType};base64,${base64}` }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`VLM API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  return result.content || '';
-}
-
-async function callExternalVision(base64: string, mimeType: string, legalName: string): Promise<string> {
-  const apiKey = process.env.VISION_API_KEY;
-  const baseUrl = process.env.VISION_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai';
-  const model = process.env.VISION_MODEL || 'gemini-2.0-flash';
-  if (!apiKey) throw new Error('VISION_API_KEY is not configured');
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model, max_tokens: 1024,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: [
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-          { type: 'text', text: `User-claimed legal name:\n"""\n${legalName}\n"""` },
-        ]},
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Vision API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  return result.choices?.[0]?.message?.content || '';
-}
-
-async function verifyImageViaVision(base64: string, mimeType: string, legalName: string): Promise<NameVerifyResult> {
-  const vlmPrompt = `${SYSTEM_PROMPT}\n\nUser-claimed legal name:\n"""\n${legalName}\n"""\n\nAnalyze the attached identity document and respond with the JSON object.`;
-
+async function verifyImage(base64: string, mimeType: string, legalName: string): Promise<NameVerifyResult> {
   try {
-    const text = await callMiniMaxVLM(base64, mimeType, vlmPrompt);
+    const text = await callVisionApi(SYSTEM_PROMPT, `User-claimed legal name:\n"""\n${legalName}\n"""`, base64, mimeType);
     return parseResult(text);
   } catch (err) {
-    console.warn('[name-verify] VLM failed:', err instanceof Error ? err.message : err);
+    return { match: false, extracted_name: '', reason: `Vision failed: ${err instanceof Error ? err.message : String(err)}`, skipped: true };
   }
-
-  if (process.env.VISION_API_KEY) {
-    try {
-      const text = await callExternalVision(base64, mimeType, legalName);
-      return parseResult(text);
-    } catch (err) {
-      console.warn('[name-verify] External vision failed:', err instanceof Error ? err.message : err);
-    }
-  }
-
-  return { match: false, extracted_name: '', reason: 'Vision verification unavailable', skipped: true };
 }
 
 async function verifyPdf(filePath: string, legalName: string): Promise<NameVerifyResult> {
-  const buffer = fs.readFileSync(filePath);
-
-  // Try rendering to image for VLM (passport PDFs are usually scanned images)
   try {
     const { execSync } = await import('child_process');
-    const { mkdtempSync, readFileSync, rmSync, readdirSync } = await import('fs');
-    const { join } = await import('path');
     const os = await import('os');
-    const tmpDir = mkdtempSync(join(os.tmpdir(), 'nameverify-'));
+    const path = await import('path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nameverify-'));
     try {
-      execSync(`pdftoppm -png -r 200 -f 1 -l 1 "${filePath}" "${join(tmpDir, 'page')}"`, { timeout: 15000 });
-      const pngs = readdirSync(tmpDir).filter(f => f.endsWith('.png'));
+      execSync(`pdftoppm -png -r 200 -f 1 -l 1 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 15000 });
+      const pngs = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png'));
       if (pngs.length > 0) {
-        const imgBuf = readFileSync(join(tmpDir, pngs[0]));
-        return await verifyImageViaVision(imgBuf.toString('base64'), 'image/png', legalName);
+        const imgBuf = fs.readFileSync(path.join(tmpDir, pngs[0]));
+        return await verifyImage(imgBuf.toString('base64'), 'image/png', legalName);
       }
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   } catch (err) {
-    console.warn('[name-verify] pdftoppm render failed:', err instanceof Error ? err.message : err);
+    console.warn('[name-verify] pdftoppm failed:', err instanceof Error ? err.message : err);
   }
 
-  // Fallback: send PDF as document block
-  try {
-    const endpoint = getAnthropicEndpoint();
-    const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.LLM_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model, max_tokens: 2048, system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } },
-          { type: 'text', text: `User-claimed legal name:\n"""\n${legalName}\n"""` },
-        ]}],
-      }),
-    });
-    if (!response.ok) throw new Error(`LLM API error ${response.status}`);
-    const result = await response.json();
-    const blocks = Array.isArray(result.content) ? result.content : [];
-    const textBlock = blocks.find((b: Record<string, unknown>) => b.type === 'text');
-    return parseResult((textBlock?.text as string) || '');
-  } catch (err) {
-    return { match: false, extracted_name: '', reason: `PDF verification failed: ${err instanceof Error ? err.message : String(err)}`, skipped: true };
-  }
+  return { match: false, extracted_name: '', reason: 'PDF name verification failed', skipped: true };
 }
 
 function parseResult(raw: string): NameVerifyResult {
