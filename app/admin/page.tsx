@@ -690,13 +690,13 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('target_subscription_date')}>Target Date{sortIcon('target_subscription_date')}</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('subscription_amount')}>Amount{sortIcon('subscription_amount')}</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Identity Proof">ID</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Address Proof">Addr</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Asset Proof">Asset</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Payment Proof">Pay</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Subscription Docs">Sub</th>
-                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px]" title="Subscription Docs Signed">Signed</th>
-                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px] min-w-[80px]" title="Payment Received">Received</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">ID<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Addr<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Asset<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Pmt<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Sub<br/>Doc</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Doc<br/>Signed</th>
+                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight min-w-[80px]">Pmt<br/>Received</th>
                   <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px]">Status</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium min-w-[150px]">Notes</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
