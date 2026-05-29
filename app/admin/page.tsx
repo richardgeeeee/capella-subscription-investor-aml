@@ -682,7 +682,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Loading...</p>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-sm min-w-[1200px]">
+            <table className="w-full text-sm min-w-[1500px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
@@ -690,6 +690,8 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('target_subscription_date')}>Target Date{sortIcon('target_subscription_date')}</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('subscription_amount')}>Amount{sortIcon('subscription_amount')}</th>
+                  <th className="text-left px-3 py-3 text-gray-600 font-medium">Status</th>
+                  <th className="text-left px-3 py-3 text-gray-600 font-medium">Payment</th>
                   <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">ID<br/>Proof</th>
                   <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Addr<br/>Proof</th>
                   <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Asset<br/>Proof</th>
@@ -706,7 +708,7 @@ export default function AdminDashboard() {
                 {(() => {
                   const now = new Date();
                   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                  const colCount = 15;
+                  const colCount = 17;
                   let lastGroup = '';
                   const rows: React.ReactNode[] = [];
 
@@ -759,6 +761,12 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-gray-600 text-xs">{link.share_class || '-'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{link.target_subscription_date || '-'}</td>
                       <td className="px-4 py-3 text-right text-gray-600 text-xs whitespace-nowrap">{link.subscription_amount ? `$${parseAmount(link.subscription_amount).toLocaleString()}` : '-'}</td>
+                      <td className="px-3 py-3">{getStatusBadge(link)}</td>
+                      <td className="px-3 py-3">
+                        {(link.payment_proof_count || 0) > 0
+                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded whitespace-nowrap">Uploaded {link.payment_proof_count}</span>
+                          : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
+                      </td>
                       <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_identity_proof" initialValue={link.track_identity_proof} /></td>
                       <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_address_proof" initialValue={link.track_address_proof} /></td>
                       <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_asset_proof" initialValue={link.track_asset_proof} /></td>
@@ -797,7 +805,7 @@ export default function AdminDashboard() {
                 })()}
                 {filteredLinks.length === 0 && (
                   <tr>
-                    <td colSpan={15} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={17} className="px-4 py-8 text-center text-gray-500">
                       {links.length === 0 ? 'No investor links yet.' : 'No matches for current filters.'}
                     </td>
                   </tr>
