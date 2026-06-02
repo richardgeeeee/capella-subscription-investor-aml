@@ -112,6 +112,7 @@ const EVENT_META: Record<string, { label: string; color: string; icon: string }>
   drafts_generated:     { label: 'Draft agreements generated',color: 'bg-purple-100 text-purple-700',   icon: '📄' },
   address_verified:     { label: 'Address verification',     color: 'bg-teal-100 text-teal-700',       icon: '🏠' },
   name_verified:        { label: 'Name verification',        color: 'bg-teal-100 text-teal-700',       icon: '👤' },
+  link_regenerated:         { label: 'Link regenerated',          color: 'bg-amber-100 text-amber-700',  icon: '🔄' },
   certified_copy_generated: { label: 'Certified copy generated', color: 'bg-cyan-100 text-cyan-700', icon: '📜' },
   certified_copy_deleted:   { label: 'Certified copy deleted',   color: 'bg-gray-100 text-gray-700', icon: '🗑️' },
   certified_copy_synced:    { label: 'Certified copy synced',    color: 'bg-emerald-100 text-emerald-700', icon: '☁️' },
@@ -254,6 +255,7 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
   const [copied, setCopied] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendResult, setResendResult] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [verifyingAddress, setVerifyingAddress] = useState(false);
   const [verifyingName, setVerifyingName] = useState(false);
@@ -414,6 +416,32 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
       setResendResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleRegenerateLink = async () => {
+    const ok = await confirm({
+      title: 'Regenerate submission link?',
+      message: 'This will create a new link URL with a fresh 30-day expiry. The investor can continue editing their existing submission through the new link.',
+      variant: 'default',
+      confirmLabel: 'Regenerate',
+      cancelLabel: 'Cancel',
+    });
+    if (!ok) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/admin/links/${linkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regenerate: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      fetchData();
+    } catch (err) {
+      await alert({ title: 'Failed', message: err instanceof Error ? err.message : String(err), variant: 'error' });
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -774,6 +802,15 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
             >
               {resending ? 'Sending...' : 'Resend Invitation'}
             </button>
+            {new Date(link.expires_at.includes('T') ? link.expires_at : link.expires_at.replace(' ', 'T') + 'Z') < new Date() && (
+              <button
+                onClick={handleRegenerateLink}
+                disabled={regenerating}
+                className="border border-amber-400 text-amber-700 bg-amber-50 px-4 py-2 rounded-lg text-sm hover:bg-amber-100 disabled:opacity-50"
+              >
+                {regenerating ? 'Regenerating...' : 'Regenerate Link (Expired)'}
+              </button>
+            )}
             <button
               onClick={() => handleSyncToDrive(false)}
               disabled={syncing || !latestSubmission}

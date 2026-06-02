@@ -725,6 +725,11 @@ export function updateLink(id: string, params: {
   return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
+export function regenerateLinkToken(id: string, newToken: string, newExpiresAt: string) {
+  const db = getDb();
+  return db.prepare('UPDATE links SET token = ?, expires_at = ?, is_revoked = 0 WHERE id = ?').run(newToken, newExpiresAt, id);
+}
+
 export function updateLinkTracking(id: string, field: string, value: string | number) {
   const db = getDb();
   const allowed = ['track_asset_proof', 'track_address_proof', 'track_identity_proof', 'track_payment_proof', 'track_sub_docs', 'track_sub_docs_signed', 'track_payment_received', 'track_status'];

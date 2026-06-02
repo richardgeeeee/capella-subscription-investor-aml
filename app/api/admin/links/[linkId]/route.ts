@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink, updateLinkNotes, updateLinkTracking, deleteLink, logLinkEvent } from '@/db';
+import { getLinkById, updateLink, updateLinkNotes, updateLinkTracking, regenerateLinkToken, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -24,6 +24,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   if (adminNotes !== undefined && Object.keys(body).length <= 2) {
     updateLinkNotes(linkId, adminNotes || '');
     return NextResponse.json({ success: true });
+  }
+
+  // Quick path: regenerate link token
+  if (body.regenerate) {
+    const crypto = await import('crypto');
+    const newToken = crypto.randomBytes(32).toString('base64url');
+    const days = body.expiryDays || 30;
+    const newExpiry = new Date(Date.now() + days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+    regenerateLinkToken(linkId, newToken, newExpiry);
+    const admin = await getAdminSession();
+    logLinkEvent(linkId, 'link_regenerated', { expiryDays: days, actor: admin?.name || 'Admin' });
+    return NextResponse.json({ success: true, token: newToken, expiresAt: newExpiry });
   }
 
   // Quick path: tracking field update
