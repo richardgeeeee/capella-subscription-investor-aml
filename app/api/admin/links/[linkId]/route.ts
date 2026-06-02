@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
@@ -28,7 +29,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
 
   // Quick path: regenerate link token
   if (body.regenerate) {
-    const crypto = await import('crypto');
     const newToken = crypto.randomBytes(32).toString('base64url');
     const days = body.expiryDays || 30;
     const newExpiry = new Date(Date.now() + days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
