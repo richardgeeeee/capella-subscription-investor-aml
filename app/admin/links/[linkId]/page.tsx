@@ -423,7 +423,6 @@ export default function LinkDetailPage({ params }: { params: Promise<{ linkId: s
     const ok = await confirm({
       title: 'Regenerate submission link?',
       message: 'This will create a new link URL with a fresh 30-day expiry. The investor can continue editing their existing submission through the new link.',
-      variant: 'default',
       confirmLabel: 'Regenerate',
       cancelLabel: 'Cancel',
     });
