@@ -54,7 +54,8 @@ export async function POST(request: Request) {
 
   // For non-multiple document types, remove the previous file of same type
   // BUT keep files that are referenced by any submission version (preserve history)
-  const isMultiple = documentType.startsWith('personnel_');
+  const MULTIPLE_DOC_TYPES = new Set(['passport_front', 'id_card', 'payment_proof', 'personnel_passport_front', 'personnel_passport_signature', 'personnel_id_card', 'personnel_address_proof']);
+  const isMultiple = MULTIPLE_DOC_TYPES.has(documentType);
   if (!isMultiple) {
     const existingFiles = getFilesByLinkId(result.link!.id);
     const versions = getSubmissionVersions(submission.id);
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(storedPath, buffer);
 
-  // Compute display name. For multiple-file types (personnel_*), append a sequence
+  // Compute display name. For multiple-file types, append a sequence
   // suffix so multiple files of the same type get distinct names.
   const link = result.link!;
   let sequenceSuffix: number | undefined;

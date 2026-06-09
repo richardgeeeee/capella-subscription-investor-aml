@@ -1,24 +1,6 @@
 import './canvas-polyfill';
 import fs from 'fs';
-
-/**
- * Address verification using two paths:
- *
- * 1. Text (MiniMax Anthropic): PDF text extraction → MiniMax Anthropic endpoint
- *    - LLM_API_KEY, LLM_BASE_URL, LLM_TEXT_MODEL
- *
- * 2. Vision (MiniMax VLM): images + scanned PDFs → /v1/coding_plan/vlm
- *    - Uses the same LLM_API_KEY (Token Plan supported)
- *    - Dedicated endpoint for image understanding
- *
- * Optional: separate vision provider (Gemini etc.) via VISION_API_KEY
- */
-
-function getAnthropicEndpoint(): string {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  return `${origin}/anthropic/v1/messages`;
-}
+import { callVisionApi, callTextApi, isVisionConfigured } from './vision-api';
 
 export interface AddressVerifyResult {
   match: boolean;
@@ -43,171 +25,27 @@ export async function verifyAddressAgainstDocument(
   mimeType: string,
   userAddress: string
 ): Promise<AddressVerifyResult> {
-  if (!process.env.LLM_API_KEY || !process.env.LLM_BASE_URL) {
-    throw new Error('LLM_API_KEY and LLM_BASE_URL must be configured');
+  if (!isVisionConfigured()) {
+    throw new Error('No vision API configured (set VISION_API_KEY + VISION_BASE_URL)');
   }
 
   const isPdf = mimeType === 'application/pdf';
   const isImage = mimeType.startsWith('image/');
 
   if (isPdf) return verifyPdf(filePath, userAddress);
-  if (isImage) return verifyImageViaVision(fs.readFileSync(filePath).toString('base64'), mimeType, userAddress);
+  if (isImage) return verifyImage(fs.readFileSync(filePath).toString('base64'), mimeType, userAddress);
 
-  return {
-    match: false,
-    extracted_address: '',
-    reason: `Unsupported file type for verification: ${mimeType}`,
-    skipped: true,
-  };
+  return { match: false, extracted_address: '', reason: `Unsupported file type: ${mimeType}`, skipped: true };
 }
 
-// --------------- MiniMax Anthropic API (text) ---------------
-
-async function callAnthropic(
-  model: string,
-  userContent: string | Array<Record<string, unknown>>
-): Promise<string> {
-  const endpoint = getAnthropicEndpoint();
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.LLM_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`LLM API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  const blocks = Array.isArray(result.content) ? result.content : [];
-  const textBlock = blocks.find((b: Record<string, unknown>) => b.type === 'text');
-  return (textBlock?.text as string) || '';
-}
-
-// --------------- MiniMax VLM API (Token Plan image understanding) ---------------
-
-async function callMiniMaxVLM(
-  base64: string,
-  mimeType: string,
-  prompt: string
-): Promise<string> {
-  const base = process.env.LLM_BASE_URL!;
-  const origin = new URL(base).origin;
-  const endpoint = `${origin}/v1/coding_plan/vlm`;
-
-  const imageUrl = `data:${mimeType};base64,${base64}`;
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({ prompt, image_url: imageUrl }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`VLM API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  const content = result.content || '';
-  if (!content) throw new Error('VLM API returned no content');
-  return content;
-}
-
-// --------------- Optional: external vision provider (Gemini etc.) ---------------
-
-async function callExternalVision(
-  base64: string,
-  mimeType: string,
-  userAddress: string
-): Promise<string> {
-  const apiKey = process.env.VISION_API_KEY;
-  const baseUrl = process.env.VISION_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai';
-  const model = process.env.VISION_MODEL || 'gemini-2.0-flash';
-
-  if (!apiKey) throw new Error('VISION_API_KEY is not configured');
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
-          ],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Vision API error ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const result = await response.json();
-  return result.choices?.[0]?.message?.content || '';
-}
-
-// --------------- Vision path ---------------
-
-async function verifyImageViaVision(
-  base64: string,
-  mimeType: string,
-  userAddress: string
-): Promise<AddressVerifyResult> {
-  const vlmPrompt = `${SYSTEM_PROMPT}\n\nUser-claimed address:\n"""\n${userAddress}\n"""\n\nAnalyze the attached document image and respond with the JSON object.`;
-
-  // Primary: MiniMax VLM endpoint (Token Plan supported)
+async function verifyImage(base64: string, mimeType: string, userAddress: string): Promise<AddressVerifyResult> {
   try {
-    const text = await callMiniMaxVLM(base64, mimeType, vlmPrompt);
+    const text = await callVisionApi(SYSTEM_PROMPT, `User-claimed address:\n"""\n${userAddress}\n"""`, base64, mimeType);
     return parseResult(text);
   } catch (err) {
-    console.warn('[vision] MiniMax VLM failed:', err instanceof Error ? err.message : err);
+    return { match: false, extracted_address: '', reason: `Vision failed: ${err instanceof Error ? err.message : String(err)}`, skipped: true };
   }
-
-  // Fallback: external vision provider (Gemini etc.) if configured
-  if (process.env.VISION_API_KEY) {
-    try {
-      const text = await callExternalVision(base64, mimeType, userAddress);
-      return parseResult(text);
-    } catch (err) {
-      console.warn('[vision] External vision failed:', err instanceof Error ? err.message : err);
-    }
-  }
-
-  return {
-    match: false,
-    extracted_address: '',
-    reason: 'Image verification is not available — please upload a PDF version instead.',
-    skipped: true,
-  };
 }
-
-// --------------- PDF path ---------------
 
 async function verifyPdf(filePath: string, userAddress: string): Promise<AddressVerifyResult> {
   const buffer = fs.readFileSync(filePath);
@@ -221,99 +59,56 @@ async function verifyPdf(filePath: string, userAddress: string): Promise<Address
     await parser.destroy();
   } catch (err) {
     console.warn('[verifyPdf] text extraction failed:', err instanceof Error ? err.message : err);
-    text = '';
   }
 
   if (text.length >= 50) {
-    return verifyPdfText(text, userAddress);
-  }
-
-  // No usable text — try rendering PDF to image for VLM
-  try {
-    const { pdf: pdfToImg } = await import('pdf-to-img');
-    const doc = await pdfToImg(buffer, { scale: 2 });
-    const pageImage = await doc.getPage(1);
-    return await verifyImageViaVision(pageImage.toString('base64'), 'image/png', userAddress);
-  } catch (renderErr) {
-    console.warn('[verifyPdf] local render failed, trying document block:', renderErr instanceof Error ? renderErr.message : renderErr);
-  }
-
-  // Fallback: send PDF as document block to MiniMax Anthropic
-  const model = process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-  try {
-    const responseText = await callAnthropic(model, [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } },
-      { type: 'text', text: `User-claimed address:\n"""\n${userAddress}\n"""` },
-    ]);
+    const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
+    const responseText = await callTextApi(
+      SYSTEM_PROMPT,
+      `Extracted text from the address proof document:\n"""\n${truncated}\n"""\n\nUser-claimed address:\n"""\n${userAddress}\n"""`
+    );
     return parseResult(responseText);
-  } catch (err) {
-    console.warn('[verifyPdf] document vision failed:', err instanceof Error ? err.message : err);
-    return {
-      match: false,
-      extracted_address: '',
-      reason: `PDF has no extractable text and vision failed: ${err instanceof Error ? err.message : String(err)}`,
-      skipped: true,
-    };
   }
+
+  // Scanned PDF — render to image via pdftoppm
+  try {
+    const { execSync } = await import('child_process');
+    const os = await import('os');
+    const path = await import('path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'addrverify-'));
+    try {
+      execSync(`pdftoppm -png -r 200 -f 1 -l 1 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 15000 });
+      const pngs = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png'));
+      if (pngs.length > 0) {
+        const imgBuf = fs.readFileSync(path.join(tmpDir, pngs[0]));
+        return await verifyImage(imgBuf.toString('base64'), 'image/png', userAddress);
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.warn('[verifyPdf] pdftoppm failed:', err instanceof Error ? err.message : err);
+  }
+
+  return { match: false, extracted_address: '', reason: 'PDF verification failed — no text and image render unavailable', skipped: true };
 }
-
-async function verifyPdfText(text: string, userAddress: string): Promise<AddressVerifyResult> {
-  const model = process.env.LLM_TEXT_MODEL || process.env.LLM_VISION_MODEL || 'MiniMax-M2.7';
-  const truncated = text.length > 6000 ? text.slice(0, 6000) : text;
-
-  const responseText = await callAnthropic(
-    model,
-    `Extracted text from the address proof document:\n"""\n${truncated}\n"""\n\nUser-claimed address:\n"""\n${userAddress}\n"""`,
-  );
-
-  return parseResult(responseText);
-}
-
-// --------------- Shared ---------------
 
 function parseResult(raw: string): AddressVerifyResult {
   if (!raw) throw new Error('Model returned empty response');
-  const stripped = raw.trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/, '');
+  const stripped = raw.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '');
   const firstBrace = stripped.indexOf('{');
   const lastBrace = stripped.lastIndexOf('}');
-  let jsonStr = firstBrace >= 0 && lastBrace > firstBrace
-    ? stripped.slice(firstBrace, lastBrace + 1)
-    : stripped;
+  const jsonStr = firstBrace >= 0 && lastBrace > firstBrace ? stripped.slice(firstBrace, lastBrace + 1) : stripped;
 
   try {
     const parsed = JSON.parse(jsonStr);
-    return {
-      match: !!parsed.match,
-      extracted_address: String(parsed.extracted_address || ''),
-      reason: String(parsed.reason || ''),
-    };
+    return { match: !!parsed.match, extracted_address: String(parsed.extracted_address || ''), reason: String(parsed.reason || '') };
   } catch {
-    jsonStr = jsonStr
-      .replace(/,\s*$/, '')
-      .replace(/"\s*$/, '"}')
-      .replace(/:\s*$/, ': ""}');
-    if (!jsonStr.endsWith('}')) jsonStr += '}';
-    try {
-      const parsed = JSON.parse(jsonStr);
-      return {
-        match: !!parsed.match,
-        extracted_address: String(parsed.extracted_address || ''),
-        reason: String(parsed.reason || '(response truncated)'),
-      };
-    } catch {
-      const matchVal = /"match"\s*:\s*(true|false)/i.exec(stripped);
-      const addrVal = /"extracted_address"\s*:\s*"([^"]*)/.exec(stripped);
-      if (matchVal) {
-        return {
-          match: matchVal[1] === 'true',
-          extracted_address: addrVal?.[1] || '',
-          reason: '(parsed from truncated response)',
-        };
-      }
-      throw new Error(`Failed to parse model response: ${stripped.slice(0, 200)}`);
+    const matchVal = /"match"\s*:\s*(true|false)/i.exec(stripped);
+    const addrVal = /"extracted_address"\s*:\s*"([^"]*)/.exec(stripped);
+    if (matchVal) {
+      return { match: matchVal[1] === 'true', extracted_address: addrVal?.[1] || '', reason: '(parsed from truncated response)' };
     }
+    throw new Error(`Failed to parse: ${jsonStr.slice(0, 200)}`);
   }
 }

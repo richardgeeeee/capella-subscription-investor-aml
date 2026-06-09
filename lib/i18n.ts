@@ -13,20 +13,28 @@ export const labels: Record<string, { en: string; zh: string }> = {
   subscriptionDate: { en: 'Target Subscription Date', zh: '计划认购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
   footnote_subscription_amount: {
-    en: 'Minimum USD 500,000.',
-    zh: '最低申购金额为 50 万美元。',
+    en: 'Minimum USD 500,000. Enter whole numbers only, in increments of USD 100.',
+    zh: '最低申购金额为 50 万美元。请输入整数，最小增量为 100 美元。',
   },
   footnote_subscription_amount_topup: {
-    en: 'Minimum USD 100,000.',
-    zh: '最低申购金额为 10 万美元。',
+    en: 'Minimum USD 300,000. Enter whole numbers only, in increments of USD 100.',
+    zh: '最低追加申购金额为 30 万美元。请输入整数，最小增量为 100 美元。',
   },
   footnote_wire_fee_warning: {
-    en: 'Note: If the top-up subscription amount is USD 100,000, please add sufficient funds to cover bank wire transfer fees (typically USD 10–15) to ensure the received amount reaches USD 100,000.',
-    zh: '注意：如追加申购金额为 10 万美元，在转账时请增加足够覆盖银行转账费用的金额（通常为 10-15 美元），确保到账金额达到 10 万美元整。',
+    en: 'Note: If the top-up subscription amount is USD 300,000, please add sufficient funds to cover bank wire transfer fees (typically USD 10–15) to ensure the received amount reaches USD 300,000.',
+    zh: '注意：如追加申购金额为 30 万美元，在转账时请增加足够覆盖银行转账费用的金额（通常为 10-15 美元），确保到账金额达到 30 万美元整。',
   },
   footnote_asset_proof_waived: {
     en: 'Subscription amount exceeds USD 1,000,000 — liquid asset proof is not required.',
     zh: '申购金额超过 100 万美元，无需提供流动资产证明。',
+  },
+
+  // -- Legal name --
+  legalFirstName: { en: 'Legal First Name', zh: '法定名' },
+  legalLastName: { en: 'Legal Last Name', zh: '法定姓氏' },
+  footnote_legal_name: {
+    en: 'Please enter in English or romanised spelling. Legal name as shown on your passport or ID — may differ from your preferred/common name (e.g. "Qiangdong" vs "Richard").',
+    zh: '请用英文或拼音填写护照或身份证上的法定姓名，可能与您的常用名不同（如"Qiangdong"与"Richard"）。',
   },
 
   // -- Individual fields --

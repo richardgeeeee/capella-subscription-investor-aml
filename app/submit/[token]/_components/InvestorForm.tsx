@@ -44,6 +44,8 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'subscriptionAmount', required: true, footnoteKey: 'footnote_subscription_amount' },
   ]},
   { section: 'section_investor', fields: [
+    { key: 'legalLastName', required: true, footnoteKey: 'footnote_legal_name' },
+    { key: 'legalFirstName', required: true },
     { key: 'dateOfBirth', type: 'date', required: true },
     { key: 'cityCountryOfBirth', required: true },
     { key: 'nationality', required: true },
