@@ -9,6 +9,7 @@ import { FormField } from './FormField';
 import { MonthEndDateField } from './MonthEndDateField';
 import { FileDropzone } from './FileDropzone';
 import { EmploymentHistorySection } from './EmploymentHistorySection';
+import { SpecialInvestmentsElection } from './SpecialInvestmentsElection';
 
 interface InvestorFormProps {
   token: string;
@@ -504,6 +505,13 @@ export function InvestorForm({
             })}
           </div>
         ))}
+
+        {/* Special Investments Election */}
+        <SpecialInvestmentsElection
+          lang={lang}
+          value={formData.specialInvestmentsElection || ''}
+          onChange={(value) => handleFieldChange('specialInvestmentsElection', value)}
+        />
 
         {/* Document uploads */}
         <div className="mb-8">

@@ -45,11 +45,18 @@ const topupSubscriptionAmount = z.string().min(1, 'Required').refine((value) => 
   return !isNaN(n) && n % 100 === 0;
 }, 'Amount must be in increments of USD 100');
 
+/** Investor must affirmatively elect to participate in Special Investments, or opt out. */
+const specialInvestmentsElection = z.string().optional().refine(
+  (value) => value === 'elect' || value === 'do_not_elect',
+  'Please make a Special Investments election / 请选择是否参与特别投资'
+);
+
 const subscriptionSchema = z.object({
   investorName: z.string().min(1),
   shareClass: z.string().optional().default(''),
   subscriptionDate: monthEndDate,
   subscriptionAmount: newSubscriptionAmount,
+  specialInvestmentsElection,
 });
 
 export function amountQualifiesForAssetProofWaiver(raw: string | undefined): boolean {

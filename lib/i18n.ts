@@ -29,6 +29,26 @@ export const labels: Record<string, { en: string; zh: string }> = {
     zh: '申购金额超过 100 万美元，无需提供流动资产证明。',
   },
 
+  // -- Special Investments Election --
+  section_special_investments: {
+    en: 'Special Investments Election',
+    zh: '特别投资(Special Investments)参与选择',
+  },
+  si_intro: {
+    en: 'I confirm that I have read and fully understood all information contained in this Consent Form and the Revised PPM, and I understand the risks, illiquidity and consequences of electing to participate in (or choosing not to participate in) Special Investments; and',
+    zh: '本人确认已参阅私募配售备忘录（“PPM”），并已了解参与或不参与特别投资的相关风险、流动性限制及后果。本人选择：',
+  },
+  si_elect_label: { en: 'ELECT', zh: '参与特别投资。' },
+  si_elect_desc: {
+    en: 'to participate in Special Investments in accordance with the Revised PPM. You agree that your Participating Shares in the relevant Class in issue at the date of the Special Investment will be automatically redeemed and the proceeds used to apply for Special Investment Shares at the Subscription Price for SI Shares. Such SI Shares are not redeemable by you while you retain this classification; or',
+    zh: '同意相关参与股份自动赎回，并将所得款项用于认购特别投资股份（“SI股份”）。SI股份在保持该分类期间不可由投资者选择赎回。',
+  },
+  si_no_elect_label: { en: 'DO NOT ELECT', zh: '不参与任何特别投资。' },
+  si_no_elect_desc: {
+    en: 'to participate in any Special Investments;',
+    zh: '现有参与股份将不受特别投资影响，亦不会获发行任何与特别投资相关的新参与股份。',
+  },
+
   // -- Legal name --
   legalFirstName: { en: 'Legal First Name', zh: '法定名' },
   legalLastName: { en: 'Legal Last Name', zh: '法定姓氏' },
