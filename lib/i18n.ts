@@ -29,6 +29,13 @@ export const labels: Record<string, { en: string; zh: string }> = {
     zh: '申购金额超过 100 万美元，无需提供流动资产证明。',
   },
 
+  // -- Callback authorization --
+  callbackAuthorized: { en: 'Authorized Callback Contact', zh: '同意授权为回访联系方式' },
+  footnote_callback_authorized: {
+    en: 'Fund administrator will verify any changes to wire instructions by telephone callback.',
+    zh: '基金管理人将通过电话回访核实电汇信息变更。请指定授权回访联系人。',
+  },
+
   // -- Special Investments Election --
   section_special_investments: {
     en: 'Special Investments Election',

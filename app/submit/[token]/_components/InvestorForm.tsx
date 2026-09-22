@@ -10,6 +10,7 @@ import { MonthEndDateField } from './MonthEndDateField';
 import { FileDropzone } from './FileDropzone';
 import { EmploymentHistorySection } from './EmploymentHistorySection';
 import { SpecialInvestmentsElection } from './SpecialInvestmentsElection';
+import { PhoneWithCallbackField } from './PhoneWithCallbackField';
 
 interface InvestorFormProps {
   token: string;
@@ -26,7 +27,7 @@ interface InvestorFormProps {
 
 interface FieldDef {
   key: string;
-  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end' | 'employment_history';
+  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end' | 'employment_history' | 'phone_callback';
   readOnly?: boolean;
   required?: boolean;
   footnoteKey?: string;
@@ -54,7 +55,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'countryOfTaxResidency', required: true },
     { key: 'identificationNumber', required: true },
     { key: 'residentialAddress', required: true },
-    { key: 'phoneNumber', required: true },
+    { key: 'phoneNumber', type: 'phone_callback', required: true },
     { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds' },
@@ -84,7 +85,7 @@ const CORPORATE_FIELDS: SectionDef[] = [
     { key: 'fiscalYearEnd', required: true },
     { key: 'natureOfBusiness', required: true },
     { key: 'address', required: true },
-    { key: 'phoneNumber', required: true },
+    { key: 'phoneNumber', type: 'phone_callback', required: true },
     { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds_corporate' },
@@ -476,6 +477,20 @@ export function InvestorForm({
                     onChange={(value) => handleFieldChange(field.key, value)}
                     required={field.required}
                     footnoteKey={field.footnoteKey}
+                  />
+                );
+              }
+              if (field.type === 'phone_callback') {
+                return (
+                  <PhoneWithCallbackField
+                    key={field.key}
+                    fieldKey={field.key}
+                    lang={lang}
+                    value={formData[field.key] || ''}
+                    onChange={(value) => handleFieldChange(field.key, value)}
+                    checked={formData.callbackAuthorized === 'yes'}
+                    onCheckedChange={(checked) => handleFieldChange('callbackAuthorized', checked ? 'yes' : 'no')}
+                    required={field.required}
                   />
                 );
               }
