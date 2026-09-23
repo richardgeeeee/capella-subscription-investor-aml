@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { SHARE_CLASSES, type ShareClass } from '@/lib/constants';
 import { useDialog } from '@/components/Dialog';
@@ -25,6 +25,15 @@ interface LinkData {
   link_category: string;
   payment_proof_count: number;
   recent_event_count: number;
+  admin_notes: string | null;
+  track_asset_proof: number;
+  track_address_proof: number;
+  track_identity_proof: number;
+  track_payment_proof: number;
+  track_sub_docs: number;
+  track_sub_docs_signed: number;
+  track_payment_received: string | null;
+  track_status: string | null;
 }
 
 interface ExistingInvestor {
@@ -49,6 +58,123 @@ function parseAmount(raw: string | null): number {
   if (!raw) return 0;
   const n = Number(raw.replace(/[^0-9.]/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+function TrackCheckbox({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: number }) {
+  const [checked, setChecked] = useState(!!initialValue);
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => {
+        setChecked(e.target.checked);
+        fetch(`/api/admin/links/${linkId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackField: field, trackValue: e.target.checked ? 1 : 0 }),
+        });
+      }}
+      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    />
+  );
+}
+
+function TrackSelect({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value);
+        fetch(`/api/admin/links/${linkId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackField: field, trackValue: e.target.value }),
+        });
+      }}
+      className="text-[11px] border-0 bg-transparent text-gray-600 focus:ring-0 px-0 py-0 cursor-pointer"
+    >
+      <option value="">—</option>
+      <option value="sent">sent</option>
+      <option value="signed">signed</option>
+      <option value="finalized">finalized</option>
+    </select>
+  );
+}
+
+function TrackText({ linkId, field, initialValue }: { linkId: string; field: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+          fetch(`/api/admin/links/${linkId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackField: field, trackValue: e.target.value }),
+          });
+        }, 800);
+      }}
+      placeholder="—"
+      className="w-full text-[11px] bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:ring-0 px-0 py-0 text-gray-700 placeholder-gray-300 outline-none"
+    />
+  );
+}
+
+function NotesCell({ linkId, initialValue }: { linkId: string; initialValue: string }) {
+  const [value, setValue] = useState(initialValue);
+  const [savedValue, setSavedValue] = useState(initialValue);
+  const [showUndo, setShowUndo] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const save = useCallback((text: string) => {
+    fetch(`/api/admin/links/${linkId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminNotes: text }),
+    });
+  }, [linkId]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const prev = savedValue;
+    const next = e.target.value;
+    setValue(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setSavedValue(prev);
+      save(next);
+      setShowUndo(true);
+      setTimeout(() => setShowUndo(false), 4000);
+    }, 800);
+  };
+
+  const handleUndo = () => {
+    setValue(savedValue);
+    save(savedValue);
+    setShowUndo(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        placeholder="Add note..."
+        className="w-full text-xs bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:ring-0 px-1 py-0.5 text-gray-700 placeholder-gray-300 outline-none"
+      />
+      {showUndo && (
+        <button onClick={handleUndo} className="text-[10px] text-blue-600 hover:text-blue-800 whitespace-nowrap flex-shrink-0">
+          undo
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function AdminDashboard() {
@@ -268,15 +394,43 @@ export default function AdminDashboard() {
     if (filterCategory !== 'all') result = result.filter(l => (l.link_category || 'new_subscription') === filterCategory);
     if (filterStatus !== 'all') result = result.filter(l => getStatusKey(l) === filterStatus);
     if (filterDate) result = result.filter(l => l.target_subscription_date?.startsWith(filterDate));
-    result.sort((a, b) => {
-      let va: string | number = '', vb: string | number = '';
-      if (sortField === 'created_at') { va = a.created_at; vb = b.created_at; }
-      else if (sortField === 'target_subscription_date') { va = a.target_subscription_date || ''; vb = b.target_subscription_date || ''; }
-      else if (sortField === 'subscription_amount') { va = parseAmount(a.subscription_amount); vb = parseAmount(b.subscription_amount); }
-      if (va < vb) return sortDir === 'asc' ? -1 : 1;
-      if (va > vb) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
+
+    if (sortField === 'created_at' && sortDir === 'desc') {
+      // Default sort: group by month (current → future → historical), within each month new before topup
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const getMonth = (l: LinkData) => l.target_subscription_date?.slice(0, 7) || '9999-99';
+      const getCat = (l: LinkData) => (l.link_category || 'new_subscription') === 'topup' ? 1 : 0;
+      const getGroupOrder = (month: string) => {
+        if (month === currentMonth) return 0; // current month first
+        if (month > currentMonth) return 1;   // future months second
+        return 2;                              // historical last
+      };
+
+      result.sort((a, b) => {
+        const ma = getMonth(a), mb = getMonth(b);
+        const ga = getGroupOrder(ma), gb = getGroupOrder(mb);
+        if (ga !== gb) return ga - gb;
+        // Within same group: current month desc isn't needed, future asc, historical desc
+        if (ga === 1) { if (ma !== mb) return ma.localeCompare(mb); } // future: nearest first
+        else { if (ma !== mb) return mb.localeCompare(ma); } // current & historical: newest first
+        // Within same month: new investors first, then topup
+        const ca = getCat(a), cb = getCat(b);
+        if (ca !== cb) return ca - cb;
+        // Within same category: by created_at desc
+        return b.created_at.localeCompare(a.created_at);
+      });
+    } else {
+      result.sort((a, b) => {
+        let va: string | number = '', vb: string | number = '';
+        if (sortField === 'created_at') { va = a.created_at; vb = b.created_at; }
+        else if (sortField === 'target_subscription_date') { va = a.target_subscription_date || ''; vb = b.target_subscription_date || ''; }
+        else if (sortField === 'subscription_amount') { va = parseAmount(a.subscription_amount); vb = parseAmount(b.subscription_amount); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
     return result;
   }, [links, filterCategory, filterStatus, filterDate, sortField, sortDir]);
 
@@ -528,7 +682,7 @@ export default function AdminDashboard() {
           <p className="text-gray-500">Loading...</p>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-x-auto">
-            <table className="w-full text-sm min-w-[900px]">
+            <table className="w-full text-sm min-w-[1500px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Investor</th>
@@ -536,17 +690,53 @@ export default function AdminDashboard() {
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Class</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('target_subscription_date')}>Target Date{sortIcon('target_subscription_date')}</th>
                   <th className="text-right px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('subscription_amount')}>Amount{sortIcon('subscription_amount')}</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium">Payment</th>
-                  <th className="text-left px-4 py-3 text-gray-600 font-medium cursor-pointer select-none" onClick={() => toggleSort('created_at')}>Created{sortIcon('created_at')}</th>
+                  <th className="text-left px-3 py-3 text-gray-600 font-medium">Status</th>
+                  <th className="text-left px-3 py-3 text-gray-600 font-medium">Payment</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">ID<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Addr<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Asset<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Pmt<br/>Proof</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Sub<br/>Doc</th>
+                  <th className="text-center px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight">Doc<br/>Signed</th>
+                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px] leading-tight min-w-[80px]">Pmt<br/>Received</th>
+                  <th className="text-left px-2 py-3 text-gray-600 font-medium text-[10px]">Status</th>
+                  <th className="text-left px-4 py-3 text-gray-600 font-medium min-w-[150px]">Notes</th>
                   <th className="text-left px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredLinks.map((link) => {
+                {(() => {
+                  const now = new Date();
+                  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                  const colCount = 17;
+                  let lastGroup = '';
+                  const rows: React.ReactNode[] = [];
+
+                  for (const link of filteredLinks) {
+                    const month = link.target_subscription_date?.slice(0, 7) || '';
+                    let group = '';
+                    if (month === currentMonth) group = 'current';
+                    else if (month > currentMonth) group = 'future';
+                    else group = 'historical';
+
+                    if (sortField === 'created_at' && sortDir === 'desc' && group !== lastGroup) {
+                      const label = group === 'current' ? `Current Month (${currentMonth})`
+                        : group === 'future' ? 'Future Investments'
+                        : 'Historical';
+                      const bg = group === 'current' ? 'bg-blue-50 text-blue-800'
+                        : group === 'future' ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-gray-100 text-gray-600';
+                      rows.push(
+                        <tr key={`group-${group}`}>
+                          <td colSpan={colCount} className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider ${bg}`}>{label}</td>
+                        </tr>
+                      );
+                      lastGroup = group;
+                    }
+
                   const cat = link.link_category || 'new_subscription';
                   const hasEvents = (link.recent_event_count || 0) > 0;
-                  return (
+                  rows.push(
                     <tr
                       key={link.id}
                       className={`hover:bg-gray-50 cursor-pointer ${hasEvents ? 'bg-yellow-50' : ''}`}
@@ -571,13 +761,23 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-gray-600 text-xs">{link.share_class || '-'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{link.target_subscription_date || '-'}</td>
                       <td className="px-4 py-3 text-right text-gray-600 text-xs whitespace-nowrap">{link.subscription_amount ? `$${parseAmount(link.subscription_amount).toLocaleString()}` : '-'}</td>
-                      <td className="px-4 py-3">{getStatusBadge(link)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">{getStatusBadge(link)}</td>
+                      <td className="px-3 py-3">
                         {(link.payment_proof_count || 0) > 0
-                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">Uploaded {link.payment_proof_count}</span>
+                          ? <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded whitespace-nowrap">Uploaded {link.payment_proof_count}</span>
                           : <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">Pending</span>}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{new Date(link.created_at).toLocaleDateString()}</td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_identity_proof" initialValue={link.track_identity_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_address_proof" initialValue={link.track_address_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_asset_proof" initialValue={link.track_asset_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_payment_proof" initialValue={link.track_payment_proof} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_sub_docs" initialValue={link.track_sub_docs} /></td>
+                      <td className="px-2 py-3 text-center" onClick={e => e.stopPropagation()}><TrackCheckbox linkId={link.id} field="track_sub_docs_signed" initialValue={link.track_sub_docs_signed} /></td>
+                      <td className="px-2 py-3" onClick={e => e.stopPropagation()}><TrackText linkId={link.id} field="track_payment_received" initialValue={link.track_payment_received || ''} /></td>
+                      <td className="px-2 py-3" onClick={e => e.stopPropagation()}><TrackSelect linkId={link.id} field="track_status" initialValue={link.track_status || ''} /></td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <NotesCell linkId={link.id} initialValue={link.admin_notes || ''} />
+                      </td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {link.investor_email && (
@@ -600,10 +800,12 @@ export default function AdminDashboard() {
                       </td>
                     </tr>
                   );
-                })}
+                  }
+                  return rows;
+                })()}
                 {filteredLinks.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={17} className="px-4 py-8 text-center text-gray-500">
                       {links.length === 0 ? 'No investor links yet.' : 'No matches for current filters.'}
                     </td>
                   </tr>

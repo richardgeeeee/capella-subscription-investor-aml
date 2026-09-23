@@ -1,26 +1,22 @@
-import sgMail from '@sendgrid/mail';
-
-let initialized = false;
-
-function init() {
-  if (!initialized && process.env.SENDGRID_API_KEY) {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    initialized = true;
-  }
-}
+import { Resend } from 'resend';
 
 const DEFAULT_FROM = 'Capella Capital <richard.ge@capella-capital.com>';
 
+function getResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
+}
+
 export async function sendVerificationEmail(to: string, code: string, investorName: string): Promise<void> {
-  if (!process.env.SENDGRID_API_KEY) {
+  const resend = getResend();
+  if (!resend) {
     console.log(`[DEV] Verification code for ${to}: ${code}`);
     return;
   }
 
-  init();
   const from = process.env.EMAIL_FROM || DEFAULT_FROM;
 
-  await sgMail.send({
+  await resend.emails.send({
     from,
     to,
     subject: 'Capella Alpha Fund - Verification Code / 奕卓資本 - 验证码',
@@ -49,12 +45,12 @@ export async function sendInvitationEmail(
   expiresAt: string,
   template: { subject: string; body_html: string }
 ): Promise<void> {
-  if (!process.env.SENDGRID_API_KEY) {
+  const resend = getResend();
+  if (!resend) {
     console.log(`[DEV] Invitation email for ${to}: ${link}`);
     return;
   }
 
-  init();
   const from = process.env.EMAIL_FROM || DEFAULT_FROM;
   const formattedExpiry = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -68,5 +64,5 @@ export async function sendInvitationEmail(
     .replace(/\{\{link\}\}/g, link)
     .replace(/\{\{expiresAt\}\}/g, formattedExpiry);
 
-  await sgMail.send({ from, to, subject, html });
+  await resend.emails.send({ from, to, subject, html });
 }

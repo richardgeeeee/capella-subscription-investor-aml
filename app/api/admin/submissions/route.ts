@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     ...f,
     address_verification: f.address_verification ? JSON.parse(f.address_verification) : null,
     payment_extraction: (f as unknown as Record<string, string>).payment_extraction ? JSON.parse((f as unknown as Record<string, string>).payment_extraction) : null,
+    name_verification: (f as unknown as Record<string, string>).name_verification ? JSON.parse((f as unknown as Record<string, string>).name_verification) : null,
   }));
   const fileMap = new Map(files.map(f => [f.id, f]));
 

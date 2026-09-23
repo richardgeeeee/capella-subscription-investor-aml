@@ -13,20 +13,55 @@ export const labels: Record<string, { en: string; zh: string }> = {
   subscriptionDate: { en: 'Target Subscription Date', zh: '计划认购日期' },
   subscriptionAmount: { en: 'Amount of Subscription (USD)', zh: '申购金额（美元）' },
   footnote_subscription_amount: {
-    en: 'Minimum USD 500,000.',
-    zh: '最低申购金额为 50 万美元。',
+    en: 'Minimum USD 500,000. Enter whole numbers only, in increments of USD 100.',
+    zh: '最低申购金额为 50 万美元。请输入整数，最小增量为 100 美元。',
   },
   footnote_subscription_amount_topup: {
-    en: 'Minimum USD 100,000.',
-    zh: '最低申购金额为 10 万美元。',
+    en: 'Minimum USD 300,000. Enter whole numbers only, in increments of USD 100.',
+    zh: '最低追加申购金额为 30 万美元。请输入整数，最小增量为 100 美元。',
   },
   footnote_wire_fee_warning: {
-    en: 'Note: If the top-up subscription amount is USD 100,000, please add sufficient funds to cover bank wire transfer fees (typically USD 10–15) to ensure the received amount reaches USD 100,000.',
-    zh: '注意：如追加申购金额为 10 万美元，在转账时请增加足够覆盖银行转账费用的金额（通常为 10-15 美元），确保到账金额达到 10 万美元整。',
+    en: 'Note: If the top-up subscription amount is USD 300,000, please add sufficient funds to cover bank wire transfer fees (typically USD 10–15) to ensure the received amount reaches USD 300,000.',
+    zh: '注意：如追加申购金额为 30 万美元，在转账时请增加足够覆盖银行转账费用的金额（通常为 10-15 美元），确保到账金额达到 30 万美元整。',
   },
   footnote_asset_proof_waived: {
     en: 'Subscription amount exceeds USD 1,000,000 — liquid asset proof is not required.',
     zh: '申购金额超过 100 万美元，无需提供流动资产证明。',
+  },
+
+  // -- Callback authorization --
+  callbackAuthorized: { en: 'Authorized Callback Contact', zh: '同意授权为回访联系方式' },
+  footnote_callback_authorized: {
+    en: 'Fund administrator will verify any changes to wire instructions by telephone callback.',
+    zh: '基金管理人将通过电话回访核实电汇信息变更。请指定授权回访联系人。',
+  },
+
+  // -- Special Investments Election --
+  section_special_investments: {
+    en: 'Special Investments Election',
+    zh: '特别投资(Special Investments)参与选择',
+  },
+  si_intro: {
+    en: 'I confirm that I have read and fully understood all information contained in the PPM, and I understand the risks, illiquidity and consequences of electing to participate in (or choosing not to participate in) Special Investments; and',
+    zh: '本人确认已参阅私募配售备忘录（“PPM”），并已了解参与或不参与特别投资的相关风险、流动性限制及后果。本人选择：',
+  },
+  si_elect_label: { en: 'ELECT', zh: '参与特别投资。' },
+  si_elect_desc: {
+    en: 'to participate in Special Investments in accordance with the PPM. You agree that your Participating Shares in the relevant Class in issue at the date of the Special Investment will be automatically redeemed and the proceeds used to apply for Special Investment Shares at the Subscription Price for SI Shares. Such SI Shares are not redeemable by you while you retain this classification; or',
+    zh: '同意相关参与股份自动赎回，并将所得款项用于认购特别投资股份（“SI股份”）。SI股份在保持该分类期间不可由投资者选择赎回。',
+  },
+  si_no_elect_label: { en: 'DO NOT ELECT', zh: '不参与任何特别投资。' },
+  si_no_elect_desc: {
+    en: 'to participate in any Special Investments;',
+    zh: '现有参与股份将不受特别投资影响，亦不会获发行任何与特别投资相关的新参与股份。',
+  },
+
+  // -- Legal name --
+  legalFirstName: { en: 'Legal First Name', zh: '法定名' },
+  legalLastName: { en: 'Legal Last Name', zh: '法定姓氏' },
+  footnote_legal_name: {
+    en: 'Please enter in English or romanised spelling. Legal name as shown on your passport or ID — may differ from your preferred/common name (e.g. "Qiangdong" vs "Richard").',
+    zh: '请用英文或拼音填写护照或身份证上的法定姓名，可能与您的常用名不同（如"Qiangdong"与"Richard"）。',
   },
 
   // -- Individual fields --

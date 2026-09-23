@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { verifyAdminSession, getAdminSession } from '@/lib/admin-auth';
-import { getLinkById, updateLink, deleteLink, logLinkEvent } from '@/db';
+import { getLinkById, updateLink, updateLinkNotes, updateLinkTracking, regenerateLinkToken, deleteLink, logLinkEvent } from '@/db';
 import { SHARE_CLASSES } from '@/lib/constants';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ linkId: string }> }) {
@@ -18,7 +19,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   }
 
   const body = await request.json();
-  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount } = body;
+  const { firstName, lastName, shareClass, investorEmail, targetSubscriptionDate, subscriptionAmount, legalFirstName, legalLastName, adminNotes } = body;
+
+  // Quick path: notes-only update (no audit log needed)
+  if (adminNotes !== undefined && Object.keys(body).length <= 2) {
+    updateLinkNotes(linkId, adminNotes || '');
+    return NextResponse.json({ success: true });
+  }
+
+  // Quick path: regenerate link token
+  if (body.regenerate) {
+    const newToken = crypto.randomBytes(32).toString('base64url');
+    const days = body.expiryDays || 30;
+    const newExpiry = new Date(Date.now() + days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+    regenerateLinkToken(linkId, newToken, newExpiry);
+    const admin = await getAdminSession();
+    logLinkEvent(linkId, 'link_regenerated', { expiryDays: days, actor: admin?.name || 'Admin' });
+    return NextResponse.json({ success: true, token: newToken, expiresAt: newExpiry });
+  }
+
+  // Quick path: tracking field update
+  const { trackField, trackValue } = body;
+  if (trackField !== undefined) {
+    updateLinkTracking(linkId, trackField, trackValue);
+    return NextResponse.json({ success: true });
+  }
 
   if (shareClass !== undefined && shareClass !== null && shareClass !== '' && !SHARE_CLASSES.includes(shareClass)) {
     return NextResponse.json({ error: `shareClass must be one of: ${SHARE_CLASSES.join(', ')}` }, { status: 400 });
@@ -43,6 +68,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
     investorEmail: investorEmail !== undefined ? investorEmail : undefined,
     targetSubscriptionDate: targetSubscriptionDate !== undefined ? targetSubscriptionDate : undefined,
     subscriptionAmount: subscriptionAmount !== undefined ? subscriptionAmount : undefined,
+    legalFirstName: legalFirstName !== undefined ? legalFirstName : undefined,
+    legalLastName: legalLastName !== undefined ? legalLastName : undefined,
   });
 
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -52,6 +79,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
   if (investorEmail !== undefined && (investorEmail || null) !== link.investor_email) changes.investorEmail = { from: link.investor_email, to: investorEmail };
   if (targetSubscriptionDate !== undefined && targetSubscriptionDate !== link.target_subscription_date) changes.targetSubscriptionDate = { from: link.target_subscription_date, to: targetSubscriptionDate };
   if (subscriptionAmount !== undefined && subscriptionAmount !== link.subscription_amount) changes.subscriptionAmount = { from: link.subscription_amount, to: subscriptionAmount };
+  if (legalFirstName !== undefined && legalFirstName !== link.legal_first_name) changes.legalFirstName = { from: link.legal_first_name, to: legalFirstName };
+  if (legalLastName !== undefined && legalLastName !== link.legal_last_name) changes.legalLastName = { from: link.legal_last_name, to: legalLastName };
   if (Object.keys(changes).length > 0) {
     const admin = await getAdminSession();
     logLinkEvent(linkId, 'admin_edit', { changes, actor: admin?.name || 'Admin' });

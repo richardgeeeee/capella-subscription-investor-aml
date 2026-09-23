@@ -9,6 +9,8 @@ import { FormField } from './FormField';
 import { MonthEndDateField } from './MonthEndDateField';
 import { FileDropzone } from './FileDropzone';
 import { EmploymentHistorySection } from './EmploymentHistorySection';
+import { SpecialInvestmentsElection } from './SpecialInvestmentsElection';
+import { PhoneWithCallbackField } from './PhoneWithCallbackField';
 
 interface InvestorFormProps {
   token: string;
@@ -25,7 +27,7 @@ interface InvestorFormProps {
 
 interface FieldDef {
   key: string;
-  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end' | 'employment_history';
+  type?: 'text' | 'date' | 'email' | 'number' | 'textarea' | 'month_end' | 'employment_history' | 'phone_callback';
   readOnly?: boolean;
   required?: boolean;
   footnoteKey?: string;
@@ -44,6 +46,8 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'subscriptionAmount', required: true, footnoteKey: 'footnote_subscription_amount' },
   ]},
   { section: 'section_investor', fields: [
+    { key: 'legalLastName', required: true, footnoteKey: 'footnote_legal_name' },
+    { key: 'legalFirstName', required: true },
     { key: 'dateOfBirth', type: 'date', required: true },
     { key: 'cityCountryOfBirth', required: true },
     { key: 'nationality', required: true },
@@ -51,7 +55,7 @@ const INDIVIDUAL_FIELDS: SectionDef[] = [
     { key: 'countryOfTaxResidency', required: true },
     { key: 'identificationNumber', required: true },
     { key: 'residentialAddress', required: true },
-    { key: 'phoneNumber', required: true },
+    { key: 'phoneNumber', type: 'phone_callback', required: true },
     { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds' },
@@ -81,7 +85,7 @@ const CORPORATE_FIELDS: SectionDef[] = [
     { key: 'fiscalYearEnd', required: true },
     { key: 'natureOfBusiness', required: true },
     { key: 'address', required: true },
-    { key: 'phoneNumber', required: true },
+    { key: 'phoneNumber', type: 'phone_callback', required: true },
     { key: 'emailAddress', type: 'email', readOnly: true, required: true },
     { key: 'sourceOfWealth', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_wealth' },
     { key: 'sourceOfFunds', type: 'textarea', required: true, footnoteKey: 'footnote_source_of_funds_corporate' },
@@ -476,6 +480,20 @@ export function InvestorForm({
                   />
                 );
               }
+              if (field.type === 'phone_callback') {
+                return (
+                  <PhoneWithCallbackField
+                    key={field.key}
+                    fieldKey={field.key}
+                    lang={lang}
+                    value={formData[field.key] || ''}
+                    onChange={(value) => handleFieldChange(field.key, value)}
+                    checked={formData.callbackAuthorized === 'yes'}
+                    onCheckedChange={(checked) => handleFieldChange('callbackAuthorized', checked ? 'yes' : 'no')}
+                    required={field.required}
+                  />
+                );
+              }
               if (field.type === 'employment_history') {
                 return (
                   <EmploymentHistorySection
@@ -502,6 +520,13 @@ export function InvestorForm({
             })}
           </div>
         ))}
+
+        {/* Special Investments Election */}
+        <SpecialInvestmentsElection
+          lang={lang}
+          value={formData.specialInvestmentsElection || ''}
+          onChange={(value) => handleFieldChange('specialInvestmentsElection', value)}
+        />
 
         {/* Document uploads */}
         <div className="mb-8">
