@@ -241,6 +241,29 @@ function runMigrations(db: Database.Database) {
     db.exec(`ALTER TABLE share_class_documents ADD COLUMN description TEXT`);
   }
 
+  if (!columnExists(db, 'uploaded_files', 'name_verification')) {
+    db.exec(`ALTER TABLE uploaded_files ADD COLUMN name_verification TEXT`);
+  }
+
+  // links — legal name (for contracts, distinct from preferred first_name/last_name)
+  if (!columnExists(db, 'links', 'legal_first_name')) {
+    db.exec(`ALTER TABLE links ADD COLUMN legal_first_name TEXT`);
+  }
+  if (!columnExists(db, 'links', 'legal_last_name')) {
+    db.exec(`ALTER TABLE links ADD COLUMN legal_last_name TEXT`);
+  }
+  if (!columnExists(db, 'links', 'admin_notes')) {
+    db.exec(`ALTER TABLE links ADD COLUMN admin_notes TEXT`);
+  }
+  if (!columnExists(db, 'links', 'track_asset_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_asset_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_address_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_address_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_identity_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_identity_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_payment_proof')) db.exec(`ALTER TABLE links ADD COLUMN track_payment_proof INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_sub_docs')) db.exec(`ALTER TABLE links ADD COLUMN track_sub_docs INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_sub_docs_signed')) db.exec(`ALTER TABLE links ADD COLUMN track_sub_docs_signed INTEGER NOT NULL DEFAULT 0`);
+  if (!columnExists(db, 'links', 'track_payment_received')) db.exec(`ALTER TABLE links ADD COLUMN track_payment_received TEXT`);
+  if (!columnExists(db, 'links', 'track_status')) db.exec(`ALTER TABLE links ADD COLUMN track_status TEXT`);
+
   // Backfill target_subscription_date and subscription_amount from existing form_data
   const unfilled = db.prepare(`
     SELECT l.id, s.form_data FROM links l
@@ -666,6 +689,8 @@ export function updateLink(id: string, params: {
   investorEmail?: string | null;
   targetSubscriptionDate?: string | null;
   subscriptionAmount?: string | null;
+  legalFirstName?: string | null;
+  legalLastName?: string | null;
 }) {
   const db = getDb();
   const sets: string[] = [];
@@ -680,6 +705,8 @@ export function updateLink(id: string, params: {
   }
   if (params.targetSubscriptionDate !== undefined) { sets.push('target_subscription_date = ?'); values.push(params.targetSubscriptionDate || null); }
   if (params.subscriptionAmount !== undefined) { sets.push('subscription_amount = ?'); values.push(params.subscriptionAmount || null); }
+  if (params.legalFirstName !== undefined) { sets.push('legal_first_name = ?'); values.push(params.legalFirstName || null); }
+  if (params.legalLastName !== undefined) { sets.push('legal_last_name = ?'); values.push(params.legalLastName || null); }
 
   if (sets.length === 0) return;
 
@@ -696,6 +723,23 @@ export function updateLink(id: string, params: {
 
   values.push(id);
   return db.prepare(`UPDATE links SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function regenerateLinkToken(id: string, newToken: string, newExpiresAt: string) {
+  const db = getDb();
+  return db.prepare('UPDATE links SET token = ?, expires_at = ?, is_revoked = 0 WHERE id = ?').run(newToken, newExpiresAt, id);
+}
+
+export function updateLinkTracking(id: string, field: string, value: string | number) {
+  const db = getDb();
+  const allowed = ['track_asset_proof', 'track_address_proof', 'track_identity_proof', 'track_payment_proof', 'track_sub_docs', 'track_sub_docs_signed', 'track_payment_received', 'track_status'];
+  if (!allowed.includes(field)) return;
+  db.prepare(`UPDATE links SET ${field} = ? WHERE id = ?`).run(value, id);
+}
+
+export function updateLinkNotes(id: string, notes: string) {
+  const db = getDb();
+  return db.prepare('UPDATE links SET admin_notes = ? WHERE id = ?').run(notes, id);
 }
 
 export function getDistinctInvestors() {
@@ -843,6 +887,17 @@ export interface LinkRow {
   target_subscription_date: string | null;
   subscription_amount: string | null;
   link_category: 'new_subscription' | 'topup';
+  legal_first_name: string | null;
+  legal_last_name: string | null;
+  admin_notes: string | null;
+  track_asset_proof: number;
+  track_address_proof: number;
+  track_identity_proof: number;
+  track_payment_proof: number;
+  track_sub_docs: number;
+  track_sub_docs_signed: number;
+  track_payment_received: string | null;
+  track_status: string | null;
 }
 
 export interface LinkEventRow {

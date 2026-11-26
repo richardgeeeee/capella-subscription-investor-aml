@@ -1,26 +1,37 @@
-import sgMail from '@sendgrid/mail';
-
-let initialized = false;
-
-function init() {
-  if (!initialized && process.env.SENDGRID_API_KEY) {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    initialized = true;
-  }
-}
+import { Resend } from 'resend';
 
 const DEFAULT_FROM = 'Capella Capital <richard.ge@capella-capital.com>';
 
+function getResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESEND_API_KEY is not set');
+    }
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+}
+
+// Resend reports failures in the resolved value rather than by throwing.
+async function deliver(resend: Resend, email: Parameters<Resend['emails']['send']>[0]): Promise<void> {
+  const { data, error } = await resend.emails.send(email);
+  if (error) {
+    console.error(`[email] Resend rejected send from ${email.from} to ${email.to}:`, error);
+    throw new Error(`Resend error (${error.name}): ${error.message}`);
+  }
+  console.log(`[email] Sent to ${email.to} via Resend, id ${data?.id}`);
+}
+
 export async function sendVerificationEmail(to: string, code: string, investorName: string): Promise<void> {
-  if (!process.env.SENDGRID_API_KEY) {
+  const resend = getResend();
+  if (!resend) {
     console.log(`[DEV] Verification code for ${to}: ${code}`);
     return;
   }
 
-  init();
   const from = process.env.EMAIL_FROM || DEFAULT_FROM;
 
-  await sgMail.send({
+  await deliver(resend, {
     from,
     to,
     subject: 'Capella Alpha Fund - Verification Code / 奕卓資本 - 验证码',
@@ -49,12 +60,12 @@ export async function sendInvitationEmail(
   expiresAt: string,
   template: { subject: string; body_html: string }
 ): Promise<void> {
-  if (!process.env.SENDGRID_API_KEY) {
+  const resend = getResend();
+  if (!resend) {
     console.log(`[DEV] Invitation email for ${to}: ${link}`);
     return;
   }
 
-  init();
   const from = process.env.EMAIL_FROM || DEFAULT_FROM;
   const formattedExpiry = new Date(expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -68,5 +79,5 @@ export async function sendInvitationEmail(
     .replace(/\{\{link\}\}/g, link)
     .replace(/\{\{expiresAt\}\}/g, formattedExpiry);
 
-  await sgMail.send({ from, to, subject, html });
+  await deliver(resend, { from, to, subject, html });
 }

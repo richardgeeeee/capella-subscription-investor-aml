@@ -32,10 +32,14 @@ export async function POST(request: Request) {
   const linkId = result.link!.id;
   const subDate = typeof formData.subscriptionDate === 'string' ? formData.subscriptionDate : undefined;
   const subAmount = typeof formData.subscriptionAmount === 'string' ? formData.subscriptionAmount : undefined;
-  if (subDate !== undefined || subAmount !== undefined) {
+  const legalFirst = typeof formData.legalFirstName === 'string' ? formData.legalFirstName : undefined;
+  const legalLast = typeof formData.legalLastName === 'string' ? formData.legalLastName : undefined;
+  if (subDate !== undefined || subAmount !== undefined || legalFirst !== undefined || legalLast !== undefined) {
     updateLink(linkId, {
       targetSubscriptionDate: subDate || undefined,
       subscriptionAmount: subAmount || undefined,
+      legalFirstName: legalFirst || undefined,
+      legalLastName: legalLast || undefined,
     });
   }
 

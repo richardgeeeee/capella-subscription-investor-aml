@@ -20,11 +20,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# poppler-utils provides pdftoppm for reliable PDF-to-image rendering
+RUN apk add --no-cache poppler-utils
+
 # Copy built app
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/db ./db
+COPY --from=builder /app/assets ./assets
 
 # Create persistent data directories
 RUN mkdir -p /app/data/uploads /app/data/templates
